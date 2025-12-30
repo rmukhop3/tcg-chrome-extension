@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Course Snapshot</title>
+  <style>
+    :root {
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      --bg: #0f0f0f;
+      --card: #ffffff;
+      --text: #1f1f1f;
+      --subtle: #5f6368;
+      --divider: #e9eaed;
+      --accent: #6fbf44;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 420px;
+      min-height: 600px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      position: relative;
+      font-family: inherit;
+    }
+
+    .demo-grid {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      align-items: center;
+    }
+
+    .overlay {
+      position: relative;
+      width: 100%;
+      max-width: 380px;
+      border-radius: 18px;
+      min-height: 64px;
+      background: var(--card);
+      border: 1px solid var(--divider);
+      box-shadow: 0 25px 55px rgba(0, 0, 0, 0.12);
+      overflow: hidden;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s ease, transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-origin: center;
+    }
+
+    .overlay.is-collapsed {
+      width: 72px;
+      opacity: 0.92;
+      transform: translateX(4px);
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 24px 24px 18px;
+    }
+
+    .institution {
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .course-meta {
+      display: block;
+      margin-top: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .description {
+      padding: 0 24px 20px;
+    }
+
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--subtle);
+      margin-bottom: 12px;
+    }
+
+    .section-label::after {
+      content: "";
+      width: 32px;
+      height: 2px;
+      background: var(--accent);
+      border-radius: 999px;
+      margin-left: 8px;
+    }
+
+    .description p {
+      font-size: 0.92rem;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    .matches {
+      padding: 0 24px 20px;
+    }
+
+    .match-indicator {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--subtle);
+    }
+
+    .match-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .match-heading h3 {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin: 0;
+      flex: 1;
+    }
+
+    .match-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--subtle);
+      white-space: nowrap;
+      margin-top: 8px;
+    }
+
+    .carousel-btn {
+      border: none;
+      background: none;
+      color: var(--accent);
+      font-size: 1.3rem;
+      line-height: 1;
+      padding: 4px;
+      cursor: pointer;
+      transition: color 0.2s ease;
+    }
+
+    .carousel-btn:hover,
+    .carousel-btn:focus {
+      color: #4b8f2f;
+      outline: none;
+    }
+
+    .match-carousel {
+      position: relative;
+      margin-top: 12px;
+    }
+
+    .match-card {
+      display: none;
+      margin-top: 0;
+      padding: 0;
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      position: relative;
+      min-height: 150px;
+    }
+
+    .match-card.is-active {
+      display: block;
+    }
+
+    .match-meta {
+      display: block;
+      margin-top: 8px;
+      font-size: 0.95rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .match-card p {
+      font-size: 0.92rem;
+      line-height: 1.6;
+      margin-top: 12px;
+      color: var(--text);
+    }
+
+    .empty-state {
+      padding: 0;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      color: var(--text);
+      font-weight: 400;
+    }
+
+    .overlay__action {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: #f9f9f9 url('triangulator_logo.png') center/65% no-repeat;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease;
+    }
+
+    .overlay__action:hover,
+    .overlay__action:focus {
+      transform: translateY(-2px) scale(1.05);
+      border-color: rgba(111, 191, 68, 0.45);
+      outline: none;
+    }
+
+    .overlay.is-collapsed .overlay__action {
+      transform: rotate(-180deg);
+    }
+
+    .overlay__content {
+      transition: opacity 0.6s ease, max-height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      max-height: 2000px;
+    }
+
+    .overlay.is-collapsed .overlay__content {
+      opacity: 0;
+      max-height: 0;
+      pointer-events: none;
+    }
+
+    .match-score {
+      flex-shrink: 0;
+    }
+
+    .match-score .pie {
+      width: 38px;
+      height: 38px;
+      border-radius: 10%;
+      background: conic-gradient(var(--accent) 0deg var(--pie-angle, 288deg), rgba(95, 99, 104, 0.25) var(--pie-angle, 288deg) 360deg);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: var(--text);
+      position: relative;
+    }
+
+    .match-score .pie::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      background: var(--card);
+      border-radius: 10%;
+      z-index: 0;
+    }
+
+    .match-score .pie span {
+      position: relative;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-grid">
+    <!-- Block C: data unavailable state -->
+    <section class="overlay overlay--compact" role="dialog" aria-labelledby="course-title-na">
+      <button class="overlay__action" type="button" aria-label="Open course details" aria-expanded="true"></button>
+      <div class="overlay__content">
+        <header>
+          <p class="institution">Northern Cascades College</p>
+          <h1 id="course-title-na">
+            Applied Linguistics Workshop
+            <span class="course-meta">LING 240 â€¢ 3 credit hours</span>
+          </h1>
+        </header>
+
+        <section class="description" aria-label="Course description">
+          <p class="section-label">Course Description</p>
+          <p class="empty-state">
+            Course data is currently unavailable for this listing. Please check back
+            later or contact your institution admin for the latest catalog details.
+          </p>
+        </section>
+      </div>
+    </section>
+
+    <!-- Block A: no alternate matches -->
+    <section class="overlay overlay--compact" role="dialog" aria-labelledby="course-title-uw">
+      <button class="overlay__action" type="button" aria-label="Open course details" aria-expanded="true"></button>
+      <div class="overlay__content">
+        <header>
+          <p class="institution">University of Washington</p>
+          <h1 id="course-title-uw">
+            Elementary Turkish
+            <span class="course-meta">TKISH 102 â€¢ 5 credit hours</span>
+          </h1>
+        </header>
+
+        <section class="description" aria-label="Course description">
+          <p class="section-label">Course Description</p>
+          <p>
+            Build on foundational Turkish with structured daily immersion in listening,
+            speaking, and cultural fluency tailored to a five-credit workload.
+          </p>
+        </section>
+      </div>
+    </section>
+
+    <!-- Block B: alternate matches available -->
+    <section class="overlay" role="dialog" aria-labelledby="course-title-alt">
+      <button class="overlay__action" type="button" aria-label="Open course details" aria-expanded="true"></button>
+      <div class="overlay__content">
+        <header>
+          <p class="institution">University of Oregon</p>
+          <h1 id="course-title-alt">
+            Intermediate Japanese
+            <span class="course-meta">JPN 203 â€¢ 4 credit hours</span>
+          </h1>
+        </header>
+
+        <section class="description" aria-label="Course description">
+          <p class="section-label">Course Description</p>
+          <p>
+            Consolidate grammar and kanji knowledge through intensive discussion-led
+            sessions, practical writing exercises, and cultural explorations.
+          </p>
+        </section>
+
+        <section class="matches" aria-label="Equivalent courses">
+          <div class="match-carousel">
+            <article class="match-card is-active" data-index="0" data-score="80">
+              <div class="match-heading">
+                <h3>Japanese Language & Society</h3>
+                <div class="match-score" role="img" aria-label="80% match">
+                  <span class="pie"><span class="pie-value">80%</span></span>
+                </div>
+              </div>
+              <span class="match-meta">JPNS 212 â€¢ 4 credit hours</span>
+              <p>
+                Emphasizes real-world interaction scenarios and expands cultural literacy
+                for students preparing to articulate advanced-level Japanese outcomes.
+              </p>
+              <div class="match-controls">
+                <span class="match-indicator">1 of 2</span>
+                <button class="carousel-btn" type="button" aria-label="Show next match">â†’</button>
+              </div>
+            </article>
+
+            <article class="match-card" data-index="1" data-score="65">
+              <div class="match-heading">
+                <h3>Contemporary Japanese Conversations</h3>
+                <div class="match-score" role="img" aria-label="65% match">
+                  <span class="pie"><span class="pie-value">65%</span></span>
+                </div>
+              </div>
+              <span class="match-meta">JAPN 215 â€¢ 3 credit hours</span>
+              <p>
+                Focuses on present-day media topics and situational speaking drills to
+                support articulation into upper-division Japanese coursework.
+              </p>
+              <div class="match-controls">
+                <span class="match-indicator">1 of 2</span>
+                <button class="carousel-btn" type="button" aria-label="Show next match">â†’</button>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

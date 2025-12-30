@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCG Test Page - Triangulator Extension</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+
+        .institutionText a {
+            color: #1976D2;
+            text-decoration: none;
+        }
+
+        .institutionText a:hover {
+            text-decoration: underline;
+        }
+
+        .admin_change_field {
+            cursor: pointer;
+        }
+
+        .highlight {
+            background-color: #fff3cd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Transfer Course Guide - Test Page</h1>
+        
+        <div class="instructions">
+            <strong>Instructions:</strong> Click on any course row below to test the Triangulator extension.
+            <br><br>
+            <strong>Test Courses:</strong>
+            <ul style="margin-top: 10px; margin-left: 20px;">
+                <li><strong>TKISH 102</strong> - Has course description, no matches</li>
+                <li><strong>JPN 203</strong> - Has course description and 2 equivalent course matches</li>
+                <li><strong>LING 240</strong> - No data available (will show error state)</li>
+            </ul>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Institution</th>
+                    <th>Subject</th>
+                    <th>Number</th>
+                    <th>Title</th>
+                    <th>Hours</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Course 1: Turkish - No matches -->
+                <tr>
+                    <td>
+                        <span class="institutionText institution_1597601">
+                            <a href="/app/tca?sourceId=003798" target="_blank">UNIVERSITY OF WASHINGTON</a>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field subject_1597601" id="1597601" title="Click to edit">TKISH</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field number_1597601" id="1597601" title="Click to edit">102</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field title_1597601" id="1597601" title="Click to edit">ELEMENTARY TURKISH</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field hours_1597601" id="1597601" title="Click to edit">5</span>
+                    </td>
+                </tr>
+
+                <!-- Course 2: Japanese - Has matches -->
+                <tr>
+                    <td>
+                        <span class="institutionText institution_1597602">
+                            <a href="/app/tca?sourceId=003799" target="_blank">UNIVERSITY OF OREGON</a>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field subject_1597602" id="1597602" title="Click to edit">JPN</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field number_1597602" id="1597602" title="Click to edit">203</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field title_1597602" id="1597602" title="Click to edit">INTERMEDIATE JAPANESE</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field hours_1597602" id="1597602" title="Click to edit">4</span>
+                    </td>
+                </tr>
+
+                <!-- Course 3: Linguistics - No data -->
+                <tr>
+                    <td>
+                        <span class="institutionText institution_1597603">
+                            <a href="/app/tca?sourceId=003800" target="_blank">NORTHERN CASCADES COLLEGE</a>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field subject_1597603" id="1597603" title="Click to edit">LING</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field number_1597603" id="1597603" title="Click to edit">240</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field title_1597603" id="1597603" title="Click to edit">APPLIED LINGUISTICS WORKSHOP</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field hours_1597603" id="1597603" title="Click to edit">3</span>
+                    </td>
+                </tr>
+
+                <!-- Additional test courses -->
+                <tr>
+                    <td>
+                        <span class="institutionText institution_1597604">
+                            <a href="/app/tca?sourceId=003801" target="_blank">ARIZONA STATE UNIVERSITY</a>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field subject_1597604" id="1597604" title="Click to edit">CSE</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field number_1597604" id="1597604" title="Click to edit">110</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field title_1597604" id="1597604" title="Click to edit">PRINCIPLES OF PROGRAMMING</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field hours_1597604" id="1597604" title="Click to edit">3</span>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <span class="institutionText institution_1597605">
+                            <a href="/app/tca?sourceId=003802" target="_blank">UNIVERSITY OF CALIFORNIA, BERKELEY</a>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field subject_1597605" id="1597605" title="Click to edit">MATH</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field number_1597605" id="1597605" title="Click to edit">53</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field title_1597605" id="1597605" title="Click to edit">MULTIVARIABLE CALCULUS</span>
+                    </td>
+                    <td>
+                        <span class="admin_change_field hours_1597605" id="1597605" title="Click to edit">4</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Add visual feedback when rows are clicked
+        document.querySelectorAll('tbody tr').forEach(row => {
+            row.addEventListener('click', function() {
+                // Remove highlight from all rows
+                document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('highlight'));
+                // Add highlight to clicked row
+                this.classList.add('highlight');
+                
+                // Log the course data for debugging
+                const subject = this.querySelector('[class*="subject_"]')?.textContent;
+                const number = this.querySelector('[class*="number_"]')?.textContent;
+                console.log(`Clicked course: ${subject} ${number}`);
+            });
+        });
+    </script>
+</body>
+</html>

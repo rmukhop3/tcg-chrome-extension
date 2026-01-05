@@ -8,13 +8,22 @@
     "storage"
   ],
   "host_permissions": [
-    "*://*/*"
+    "*://*/*",
+    "file://*/*",
+    "https://api-main-poc.aiml.asu.edu/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "*://*/*",
+        "file://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -29,6 +38,10 @@
       "128": "icons/icon128.png"
     }
   },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -36,8 +49,15 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "triangulator_logo.png", "backgrounddotpattern.jpg"],
-      "matches": ["*://*/*"]
+      "resources": [
+        "popup.html",
+        "triangulator_logo.png",
+        "backgrounddotpattern.jpg"
+      ],
+      "matches": [
+        "*://*/*",
+        "file://*/*"
+      ]
     }
   ]
 }

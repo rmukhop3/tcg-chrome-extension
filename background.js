@@ -1,102 +1,109 @@
-// background.js - Cloudflare Worker API integration
+// background.js - ASU CreateAI API integration
 
 const API_CONFIG = {
-  baseUrl: 'https://triangulator-api.ftessili.workers.dev'
+  baseUrl: 'https://api-main-poc.aiml.asu.edu/query',
+  token: 'YOUR_BEARER_TOKEN_HERE' // Replace with your actual Bearer token
 };
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'getCourseDescription') {
-    fetchCourseDescription(request.courseData).then(data => {
-      sendResponse(data); // Send full object
+  if (request.action === 'getCourseData') {
+    fetchCourseData(request.courseData).then(data => {
+      sendResponse(data);
     });
-    return true;
+    return true; // Keep message channel open for async response
   }
-  
-  if (request.action === 'getCourseMatches') {
-    fetchCourseMatches(request.courseData, request.description).then(response => {
-      sendResponse(response);
-    });
-    return true;
-  } 
 });
 
-// Fetch course description from Cloudflare Worker
-async function fetchCourseDescription(courseData) {
+/**
+ * Fetch course data (description and matches) from CreateAI API
+ */
+async function fetchCourseData(courseData) {
   try {
-    const params = new URLSearchParams({
-      institution: courseData.institution,
-      subject: courseData.subject,
-      number: courseData.number
-    });
-    
-    console.log('Fetching description:', `${API_CONFIG.baseUrl}/course?${params}`);
-    
-    const response = await fetch(`${API_CONFIG.baseUrl}/course?${params}`);
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('Full response from Worker:', data);
-      return data; // Return full object with fuzzy, matched_course, similarity
-    } else {
-      console.error('Worker error:', response.status);
-      return { description: 'Course description not found in catalog.' };
-    }
-  } catch (error) {
-    console.error('Fetch error:', error);
-    return { description: 'Course description not found in catalog.' };
-  }
-}
+    // Get token from storage
+    const storage = await chrome.storage.local.get({ createaiToken: '' });
+    const token = storage.createaiToken;
 
-// Fetch ASU course matches from Cloudflare Worker
-async function fetchCourseMatches(courseData, description) {
-  try {
-    console.log('Fetching matches for:', courseData.subject, courseData.number);
-    
-    const response = await fetch(`${API_CONFIG.baseUrl}/match`, {
+    if (!token) {
+      console.error('CreateAI API Error: No token found in storage.');
+      return { success: false, error: 'API Token missing. Please set it in the extension options.' };
+    }
+
+    const query = `${courseData.institution}::${courseData.subject}::${courseData.number}`;
+    console.log('Fetching CreateAI data for query:', query);
+
+    // ... rest of the payload and fetch logic stays same ...
+    const payload = {
+      "model_provider": "openai",
+      "model_name": "gpt5",
+      "model_params": {
+        "temperature": 0.5,
+        "max_tokens": 2000,
+        "system_prompt": "",
+        "top_k": 3
+      },
+      "query": query,
+      "enable_search": true,
+      "search_params": {
+        "db_type": "opensearch",
+        "collection": "0cc3f744a8c740b0b36afb154d07ae24",
+        "top_k": 3,
+        "output_fields": ["content", "source_name", "page_number", "source_type", "chunk_number"]
+      },
+      "response_format": { "type": "json" }
+    };
+
+    const response = await fetch(API_CONFIG.baseUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({
-        institution: courseData.institution,
-        subject: courseData.subject,
-        number: courseData.number,
-        title: courseData.title,
-        description: description,
-        hours: courseData.hours
-      })
+      body: JSON.stringify(payload)
     });
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log('Matches:', data);
-      
-      if (data.matches && Array.isArray(data.matches)) {
-        const matches = data.matches.map(match => ({
-          title: match.title,
-          subject: match.subject,
-          number: match.number,
-          hours: match.hours,
-          score: match.score,
-          description: match.description
-        }));
-        
-        return {
-          success: true,
-          matches: matches
-        };
-      }
-      
-      return { success: true, matches: [] };
-    } else {
-      console.error('Match API error:', response.status);
-      return { success: false, error: `API returned ${response.status}` };
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('CreateAI API error:', response.status, errorText);
+      return { success: false, error: `API error: ${response.status}` };
     }
+
+    const data = await response.json();
+    console.log('CreateAI Raw Response:', data);
+
+    // Parse the inner JSON string from the "response" field
+    try {
+      const innerResponse = JSON.parse(data.response);
+
+      // Map match_1, match_2, match_3 to an array
+      const matches = [];
+      if (innerResponse.matches) {
+        Object.keys(innerResponse.matches).forEach(key => {
+          const match = innerResponse.matches[key];
+          matches.push({
+            subject: match.subject,
+            number: match.number,
+            title: match.title,
+            description: match.description,
+            score: 100 // Default score since not provided in this format
+          });
+        });
+      }
+
+      return {
+        success: true,
+        description: innerResponse.input_course_description,
+        matches: matches
+      };
+    } catch (parseError) {
+      console.error('Error parsing inner JSON response:', parseError);
+      return { success: false, error: 'Failed to parse API response' };
+    }
+
   } catch (error) {
-    console.error('Match fetch error:', error);
+    console.error('Fetch error:', error);
     return { success: false, error: error.message };
   }
 }
 
-console.log('Triangulator extension background script loaded');
+console.log('Triangulator extension background script (CreateAI) loaded');

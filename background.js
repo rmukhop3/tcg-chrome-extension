@@ -35,9 +35,9 @@ async function fetchCourseData(courseData) {
     // ... rest of the payload and fetch logic stays same ...
     const payload = {
       "model_provider": "openai",
-      "model_name": "gpt5",
+      "model_name": "gpt4o",
       "model_params": {
-        "temperature": 0.5,
+        "temperature": 0.1,
         "max_tokens": 2000,
         "system_prompt": "",
         "top_k": 3
@@ -73,7 +73,12 @@ async function fetchCourseData(courseData) {
 
     // Parse the inner JSON string from the "response" field
     try {
-      const innerResponse = JSON.parse(data.response);
+      let responseText = data.response;
+
+      // Remove markdown code blocks if present (e.g. ```json ... ```)
+      responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+
+      const innerResponse = JSON.parse(responseText);
 
       // Map match_1, match_2, match_3 to an array
       const matches = [];

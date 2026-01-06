@@ -2,7 +2,7 @@
 
 const API_CONFIG = {
   baseUrl: 'https://api-main-poc.aiml.asu.edu/query',
-  token: 'YOUR_BEARER_TOKEN_HERE' // Replace with your actual Bearer token
+  token: '' // Note: Bearer token is retrieved from chrome.storage.local at runtime; do not hardcode tokens here.
 };
 
 // Listen for messages from content script

@@ -8,15 +8,12 @@
     "storage"
   ],
   "host_permissions": [
-    "*://*/*",
-    "file://*/*",
-    "https://api-main-poc.aiml.asu.edu/*"
+    "https://transferguide-qa.apps.asu.edu/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "*://*/*",
-        "file://*/*"
+        "https://transferguide-qa.apps.asu.edu/*"
       ],
       "js": [
         "content.js"
@@ -30,6 +27,10 @@
   "background": {
     "service_worker": "background.js"
   },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -37,10 +38,6 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  },
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": false
   },
   "icons": {
     "16": "icons/icon16.png",
@@ -55,8 +52,7 @@
         "backgrounddotpattern.jpg"
       ],
       "matches": [
-        "*://*/*",
-        "file://*/*"
+        "https://transferguide-qa.apps.asu.edu/*"
       ]
     }
   ]

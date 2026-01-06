@@ -84,25 +84,58 @@ async function fetchCourseData(courseData) {
       responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
 
       const innerResponse = JSON.parse(responseText);
+      const description = innerResponse.input_course_description;
 
-      // Map match_1, match_2, match_3 to an array
+      // 1. Verify if the Subject and Number are present in the core course data (implied requirement is for validity)
+      // We check the input courseData since that's what we're looking up
+      if (!courseData.subject || !courseData.number) {
+        return { success: false, error: 'Invalid course data: Missing subject or number.' };
+      }
+
+      // 2. If the Course Description cannot be found, do not give matches.
+      const lowerDesc = (description || '').toLowerCase();
+      const descriptionNotFound = !description ||
+        description.length < 5 ||
+        lowerDesc.includes('not found') ||
+        lowerDesc.includes('unavailable') ||
+        lowerDesc.includes('no description') ||
+        lowerDesc.includes('cannot find') ||
+        lowerDesc.includes('could not find');
+
       const matches = [];
-      if (innerResponse.matches) {
+      if (!descriptionNotFound && innerResponse.matches) {
         Object.keys(innerResponse.matches).forEach(key => {
           const match = innerResponse.matches[key];
-          matches.push({
-            subject: match.subject,
-            number: match.number,
-            title: match.title,
-            description: match.description,
-            score: 100 // Default score since not provided in this format
-          });
+
+          // Also validate that match has subject and number
+          if (match.subject && match.number) {
+            // Normalize number: Remove .0 hallucination (e.g., 216.0 -> 216)
+            let cleanNumber = String(match.number);
+            if (cleanNumber.endsWith('.0')) {
+              cleanNumber = cleanNumber.slice(0, -2);
+            }
+
+            matches.push({
+              subject: match.subject,
+              number: cleanNumber,
+              title: match.title,
+              description: match.description
+            });
+          }
         });
+      }
+
+      if (descriptionNotFound) {
+        return {
+          success: true,
+          description: description || 'Course description not found in catalog.',
+          matches: [] // No matches if description is missing
+        };
       }
 
       return {
         success: true,
-        description: innerResponse.input_course_description,
+        description: description,
         matches: matches
       };
     } catch (parseError) {

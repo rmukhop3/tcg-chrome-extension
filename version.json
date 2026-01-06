@@ -1,5 +1,5 @@
 {
-    "version": "1.0.1",
+    "version": "1.1.0",
     "last_updated": "2026-01-05",
-    "description": "Updated model to gpt4o and handle json searialization for the response"
+    "description": "Refined query structure with course titles, added validation layer for course data integrity, and simplified UI by removing match metrics."
 }

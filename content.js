@@ -592,12 +592,9 @@ function generateMatchesHTML(matches) {
   if (!matches || matches.length === 0) return '';
 
   const matchCards = matches.map((match, index) => `
-    <article class="match-card ${index === 0 ? 'is-active' : ''}" data-index="${index}" data-score="${match.score || 100}">
+    <article class="match-card ${index === 0 ? 'is-active' : ''}" data-index="${index}">
       <div class="match-heading">
         <h3>${match.title}</h3>
-        <div class="match-score" role="img" aria-label="${match.score || 100}% match">
-          <span class="pie"><span class="pie-value">${match.score || 100}%</span></span>
-        </div>
       </div>
       <span class="match-meta">ASU Match: ${match.subject} ${match.number}</span>
       <p>${match.description}</p>

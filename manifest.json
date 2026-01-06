@@ -8,18 +8,28 @@
     "storage"
   ],
   "host_permissions": [
-    "*://*/*"
+    "https://transferguide-qa.apps.asu.edu/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://transferguide-qa.apps.asu.edu/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
   },
   "action": {
     "default_popup": "popup.html",
@@ -36,8 +46,14 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "triangulator_logo.png", "backgrounddotpattern.jpg"],
-      "matches": ["*://*/*"]
+      "resources": [
+        "popup.html",
+        "triangulator_logo.png",
+        "backgrounddotpattern.jpg"
+      ],
+      "matches": [
+        "https://transferguide-qa.apps.asu.edu/*"
+      ]
     }
   ]
 }

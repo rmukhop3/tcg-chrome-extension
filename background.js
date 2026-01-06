@@ -29,7 +29,12 @@ async function fetchCourseData(courseData) {
       return { success: false, error: 'API Token missing. Please set it in the extension options.' };
     }
 
-    const query = `${courseData.institution}::${courseData.subject}::${courseData.number}`;
+    const institution = courseData.institution || '';
+    const subject = courseData.subject || '';
+    const number = courseData.number || '';
+    const title = courseData.title || '';
+
+    const query = `${institution} ${subject} ${number} ${title}`.trim();
     console.log('Fetching CreateAI data for query:', query);
 
     // ... rest of the payload and fetch logic stays same ...

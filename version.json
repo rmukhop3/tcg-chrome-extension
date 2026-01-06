@@ -1,5 +1,5 @@
 {
-    "version": "1.0.0",
+    "version": "1.0.1",
     "last_updated": "2026-01-05",
-    "description": "Initial development version with local file support and centralized versioning."
+    "description": "Updated model to gpt4o and handle json searialization for the response"
 }

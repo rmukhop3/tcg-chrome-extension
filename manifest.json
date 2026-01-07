@@ -1,19 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Triangulator Course Matcher",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Find equivalent courses across institutions",
   "permissions": [
     "activeTab",
     "storage"
   ],
   "host_permissions": [
-    "https://transferguide-qa.apps.asu.edu/*"
+    "https://transferguide-qa.apps.asu.edu/*",
+    "https://transferguide.apps.asu.edu/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "https://transferguide-qa.apps.asu.edu/*"
+        "https://transferguide-qa.apps.asu.edu/*",
+        "https://transferguide.apps.asu.edu/*"
       ],
       "js": [
         "content.js"
@@ -52,7 +54,8 @@
         "backgrounddotpattern.jpg"
       ],
       "matches": [
-        "https://transferguide-qa.apps.asu.edu/*"
+        "https://transferguide-qa.apps.asu.edu/*",
+        "https://transferguide.apps.asu.edu/*"
       ]
     }
   ]

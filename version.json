@@ -1,5 +1,5 @@
 {
-    "version": "1.1.0",
-    "last_updated": "2026-01-05",
-    "description": "Refined query structure with course titles, added validation layer for course data integrity, and simplified UI by removing match metrics."
+    "version": "1.0.1",
+    "last_updated": "2026-01-07",
+    "description": "Whitelisted transferguide prod url for the extension"
 }

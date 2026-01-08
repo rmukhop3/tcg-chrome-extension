@@ -2,3 +2,6 @@
 .DS_Store
 *.log
 node_modules/
+INSTALLATION.md
+PROJECT_SUMMARY.md
+QUICKSTART.md

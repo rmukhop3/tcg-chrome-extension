@@ -128,7 +128,7 @@ async function fetchCourseData(courseData) {
       if (descriptionNotFound) {
         return {
           success: true,
-          description: description || 'Course description not found in catalog.',
+          description: description || 'Course description not available in catalog.',
           matches: [] // No matches if description is missing
         };
       }

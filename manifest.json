@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Triangulator Course Matcher",
-  "version": "1.0.1",
-  "description": "Find equivalent courses across institutions",
+  "version": "1.0.2",
+  "description": "Content is human reviewed and uses generative AI.",
   "permissions": [
     "activeTab",
     "storage"

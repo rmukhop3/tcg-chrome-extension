@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Triangulator Course Matcher",
   "version": "1.0.2",
-  "description": "Content is human reviewed and uses generative AI.",
+  "description": "AI-curated catalogs, human-reviewed and refined with AI generative matching",
   "permissions": [
     "activeTab",
     "storage"

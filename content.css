@@ -556,16 +556,41 @@
   background: rgba(111, 191, 68, 0.12);
   color: #2e7d32;
 }
-.triangulator-popup .match-status--exact svg { fill: #6fbf44; }
+
+.triangulator-popup .match-status--exact svg {
+  fill: #6fbf44;
+}
 
 .triangulator-popup .match-status--fuzzy {
   background: rgba(255, 179, 0, 0.12);
   color: #f57c00;
 }
-.triangulator-popup .match-status--fuzzy svg { fill: #ffb300; }
+
+.triangulator-popup .match-status--fuzzy svg {
+  fill: #ffb300;
+}
 
 .triangulator-popup .match-status--none {
   background: rgba(211, 47, 47, 0.12);
   color: #d32f2f;
 }
-.triangulator-popup .match-status--none svg { fill: #d32f2f; }
+
+.triangulator-popup .match-status--none svg {
+  fill: #d32f2f;
+}
+
+.triangulator-popup .reflected-course-context {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+  color: #555;
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #ffb300;
+}
+
+.triangulator-popup .reflected-course-context strong {
+  color: #333;
+  margin-right: 4px;
+}

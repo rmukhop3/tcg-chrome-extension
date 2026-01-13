@@ -476,6 +476,8 @@ function showTriangulatorPopup(courseData, event) {
         matches: response.matches,
         match_type: response.match_type,
         similarity: response.similarity,
+        reflected_course: response.reflected_course,
+        description_is_missing: response.description_is_missing,
         loading: false
       });
       initializePopupControls(popup);
@@ -503,6 +505,8 @@ function generatePopupHTML(courseData, response) {
   const isError = response && response.error;
   const courseDescription = response?.description || 'Course data is currently unavailable for this listing.';
   const matchType = response?.match_type || 'none';
+  const reflectedCourse = response?.reflected_course;
+  const descriptionMissing = response?.description_is_missing;
 
   const getStatusIndicatorHTML = (type) => {
     let icon = '';
@@ -551,14 +555,27 @@ function generatePopupHTML(courseData, response) {
           <h1 id="course-title">
             ${courseData.title || 'Course Title'}
             <span class="course-meta">${courseData.subject} ${courseData.number} • ${courseData.hours} credit hours</span>
-            ${!isLoading && !isError ? getStatusIndicatorHTML(matchType) : ''}
           </h1>
+
+          ${!isLoading && !isError ? getStatusIndicatorHTML(matchType) : ''}
+
+          ${!isLoading && !isError && matchType === 'fuzzy' && reflectedCourse && reflectedCourse.subject ? `
+            <div class="reflected-header" style="margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--divider);">
+              <h1 class="reflected-title">
+                ${reflectedCourse.title || 'Catalog Match'}
+                <span class="course-meta">${reflectedCourse.subject} ${reflectedCourse.number}</span>
+              </h1>
+            </div>
+          ` : ''}
         </header>
 
         ${!isLoading && !isError && (matchType === 'exact' || matchType === 'fuzzy') ? `
         <section class="description" aria-label="Course description">
           <p class="section-label">Course Description</p>
-          <p>${courseDescription}</p>
+          <p>
+            ${descriptionMissing ? `<span style="color: #666; font-style: italic; display: block; margin-bottom: 8px;">(Subject/Number matched, but full catalog description is missing)</span>` : ''}
+            ${courseDescription}
+          </p>
         </section>
         ` : isLoading ? `
         <section class="description" aria-label="Course description">
@@ -567,11 +584,21 @@ function generatePopupHTML(courseData, response) {
         </section>
         ` : ''}
 
+        ${!isLoading && !isError && (matchType === 'exact' || matchType === 'fuzzy') ? `
         <div id="matches-container">
           ${isLoading ? '<section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>' : ''}
           ${isError ? `<section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>` : ''}
           ${hasMatches ? generateMatchesHTML(response.matches) : ''}
         </div>
+        ` : isLoading ? `
+        <div id="matches-container">
+          <section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>
+        </div>
+        ` : isError ? `
+        <div id="matches-container">
+          <section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>
+        </div>
+        ` : ''}
       </div>
     </section>
   `;

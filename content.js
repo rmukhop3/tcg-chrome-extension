@@ -474,6 +474,8 @@ function showTriangulatorPopup(courseData, event) {
       popup.innerHTML = generatePopupHTML(courseData, {
         description: response.description,
         matches: response.matches,
+        match_type: response.match_type,
+        similarity: response.similarity,
         loading: false
       });
       initializePopupControls(popup);
@@ -500,6 +502,45 @@ function generatePopupHTML(courseData, response) {
   const isLoading = response && response.loading;
   const isError = response && response.error;
   const courseDescription = response?.description || 'Course data is currently unavailable for this listing.';
+  const matchType = response?.match_type || 'none';
+
+  const getStatusIndicatorHTML = (type) => {
+    let icon = '';
+    let label = '';
+    let className = '';
+
+    switch (type) {
+      case 'exact':
+        icon = '<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+        label = 'Exact Match';
+        className = 'match-status--exact';
+        break;
+      case 'fuzzy':
+        icon = '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>';
+        label = 'Fuzzy Match';
+        className = 'match-status--fuzzy';
+        break;
+      case 'no_match':
+        icon = '<svg viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/></svg>';
+        label = 'No Match';
+        className = 'match-status--none';
+        break;
+      case 'catalog_not_found':
+        icon = '<svg viewBox="0 0 24 24"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/></svg>';
+        label = 'Catalog Not Found';
+        className = 'match-status--none';
+        break;
+      default:
+        return '';
+    }
+
+    return `
+      <div class="match-status ${className}">
+        ${icon}
+        <span class="match-status-label">${label}</span>
+      </div>
+    `;
+  };
 
   return `
     <section class="overlay" role="dialog" aria-labelledby="course-title">
@@ -510,19 +551,26 @@ function generatePopupHTML(courseData, response) {
           <h1 id="course-title">
             ${courseData.title || 'Course Title'}
             <span class="course-meta">${courseData.subject} ${courseData.number} • ${courseData.hours} credit hours</span>
+            ${!isLoading && !isError ? getStatusIndicatorHTML(matchType) : ''}
           </h1>
         </header>
 
+        ${!isLoading && !isError && (matchType === 'exact' || matchType === 'fuzzy') ? `
         <section class="description" aria-label="Course description">
           <p class="section-label">Course Description</p>
-          <p>${isLoading ? 'Loading description...' : courseDescription}</p>
+          <p>${courseDescription}</p>
         </section>
+        ` : isLoading ? `
+        <section class="description" aria-label="Course description">
+          <p class="section-label">Course Description</p>
+          <p>Loading description...</p>
+        </section>
+        ` : ''}
 
         <div id="matches-container">
           ${isLoading ? '<section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>' : ''}
           ${isError ? `<section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>` : ''}
           ${hasMatches ? generateMatchesHTML(response.matches) : ''}
-          ${!isLoading && !isError && !hasMatches ? '<section class="matches"><p style="text-align: center; color: #666; padding: 20px;">No equivalent courses found at ASU.</p></section>' : ''}
         </div>
       </div>
     </section>

@@ -531,3 +531,41 @@
   position: relative;
   z-index: 1;
 }
+
+/* Match Status Indicators */
+.triangulator-popup .match-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 10px;
+  width: fit-content;
+}
+
+.triangulator-popup .match-status svg {
+  width: 16px;
+  height: 16px;
+}
+
+.triangulator-popup .match-status--exact {
+  background: rgba(111, 191, 68, 0.12);
+  color: #2e7d32;
+}
+.triangulator-popup .match-status--exact svg { fill: #6fbf44; }
+
+.triangulator-popup .match-status--fuzzy {
+  background: rgba(255, 179, 0, 0.12);
+  color: #f57c00;
+}
+.triangulator-popup .match-status--fuzzy svg { fill: #ffb300; }
+
+.triangulator-popup .match-status--none {
+  background: rgba(211, 47, 47, 0.12);
+  color: #d32f2f;
+}
+.triangulator-popup .match-status--none svg { fill: #d32f2f; }

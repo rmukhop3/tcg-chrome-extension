@@ -26,9 +26,6 @@ function calculateSimilarity(s1, s2) {
 
   if (s1 === s2) return 1.0;
 
-  // Simple Jaro-Winkler or Levenshtein would be better, but for course codes
-  // we can use a basic overlap + length penalty or similar.
-  // Let's use a basic character-based similarity for now.
   const longer = s1.length > s2.length ? s1 : s2;
   const shorter = s1.length > s2.length ? s2 : s1;
   const longerLength = longer.length;
@@ -62,7 +59,6 @@ function editDistance(s1, s2) {
 
 /**
  * Validate institution name match with abbreviation handling
- * e.g. "AGRICULTURAL" matches "AG", "COLLEGE" matches "COLL"
  */
 function validateInstitution(requested, reflected) {
   if (!requested || !reflected) return false;
@@ -75,14 +71,11 @@ function validateInstitution(requested, reflected) {
   const req = normalize(requested);
   const ref = normalize(reflected);
 
-  // 1. Direct match
   if (req === ref) return true;
 
-  // 2. Word overlapping with abbreviation check
   const reqWords = req.split(' ');
   const refWords = ref.split(' ');
 
-  // Common abbreviations map
   const abbreviations = {
     'university': 'univ',
     'college': 'coll',
@@ -101,9 +94,8 @@ function validateInstitution(requested, reflected) {
 
   let matchCount = 0;
 
-  // Check if enough words from the requested institution appear in the reflected one
   for (const w1 of reqWords) {
-    if (w1.length <= 2 && !abbreviations[w1]) continue; // Skip small words like "of", "the" unless mapped
+    if (w1.length <= 2 && !abbreviations[w1]) continue;
 
     for (const w2 of refWords) {
       if (w1 === w2) {
@@ -111,7 +103,6 @@ function validateInstitution(requested, reflected) {
         break;
       }
 
-      // Check abbreviations both ways
       const abbr1 = abbreviations[w1];
       const abbr2 = abbreviations[w2];
 
@@ -120,7 +111,6 @@ function validateInstitution(requested, reflected) {
         break;
       }
 
-      // Check simple prefix match if word is long enough
       if (w1.length > 4 && w2.length > 4) {
         if (w1.startsWith(w2) || w2.startsWith(w1)) {
           matchCount++;
@@ -130,9 +120,7 @@ function validateInstitution(requested, reflected) {
     }
   }
 
-  // If we matched more than 50% of the significant words, consider it valid
   const significantReqWords = reqWords.filter(w => w.length > 2).length;
-  // Guard against division by zero
   if (significantReqWords === 0) return true;
 
   return (matchCount / significantReqWords) >= 0.5;
@@ -143,6 +131,139 @@ function extractInstitutionFromContent(text) {
   const m = text.match(/([A-Z0-9 &\-]+)::([A-Z]{2,6})::(\d+[A-Za-z]*)/);
   if (m) return m[1].trim();
   return '';
+}
+
+/**
+ * NEW: Extract a specific course's description from a CSV chunk
+ * This is the key fix - it finds the exact course row and extracts its description
+ */
+function extractCourseDescriptionFromChunk(chunkText, requestedSubject, requestedNumber) {
+  if (!chunkText || typeof chunkText !== 'string') return null;
+
+  const reqSubj = (requestedSubject || '').toUpperCase().trim();
+  const reqNum = (requestedNumber || '').toString().replace(/[^0-9]/g, ''); // Get base number
+
+  if (!reqSubj || !reqNum) return null;
+
+  // Strategy 1: Look for canonical_key pattern like "INSTITUTION::SUBJECT::NUMBER"
+  // followed by course data in CSV format
+
+  // Build regex to find the specific course row
+  // Pattern: INSTITUTION::SUBJECT::NUMBER,... followed by course data
+  const canonicalPattern = new RegExp(
+    `([A-Z0-9 &\\-]+)::${reqSubj}::${reqNum}[A-Za-z]?\\s*,` +  // canonical_key
+    `[^,]*,` +  // RulesUniqueIdentifier
+    `[^,]*,` +  // RulesInstitutionName
+    `${reqSubj},` +  // CourseSubject
+    `${reqNum}[A-Za-z]?,` +  // CourseNumber
+    `([^,]+),` +  // CourseLongTitle (capture group 2)
+    `"?([^"]+)"?` // CourseDescription (capture group 3) - may be quoted
+    , 'i'
+  );
+
+  let match = chunkText.match(canonicalPattern);
+  if (match && match[3]) {
+    const desc = match[3].trim();
+    if (desc.length >= 30 && !desc.toLowerCase().includes('cannot find')) {
+      console.log(`extractCourseDescriptionFromChunk: Found via canonical pattern for ${reqSubj} ${reqNum}`);
+      return {
+        description: desc,
+        title: match[2] ? match[2].trim() : '',
+        method: 'canonical_pattern'
+      };
+    }
+  }
+
+  // Strategy 2: Look for the course in a more flexible way
+  // Find pattern: SUBJECT,NUMBER,Title,"Description"
+  const flexPattern = new RegExp(
+    `${reqSubj},\\s*${reqNum}[A-Za-z]?,\\s*` +  // Subject, Number
+    `([^,]+),\\s*` +  // Title (capture group 1)
+    `"([^"]{30,})"` // Description in quotes (capture group 2)
+    , 'i'
+  );
+
+  match = chunkText.match(flexPattern);
+  if (match && match[2]) {
+    const desc = match[2].trim();
+    if (desc.length >= 30) {
+      console.log(`extractCourseDescriptionFromChunk: Found via flex pattern for ${reqSubj} ${reqNum}`);
+      return {
+        description: desc,
+        title: match[1] ? match[1].trim() : '',
+        method: 'flex_pattern'
+      };
+    }
+  }
+
+  // Strategy 3: Look for a block that starts with the course identifier
+  // Pattern: INST::SUBJ::NUM followed by institution name, then subject, number, title, description
+  const blockPattern = new RegExp(
+    `[A-Z0-9 &\\-]+::${reqSubj}::${reqNum}[A-Za-z]?[\\s,]+` +
+    `\\d+[\\s,]+` +  // RulesUniqueIdentifier
+    `[A-Z0-9 &\\-]+[\\s,]+` +  // Institution name
+    `${reqSubj}[\\s,]+` +
+    `${reqNum}[A-Za-z]?[\\s,]+` +
+    `([^,]+)[\\s,]+` +  // Title
+    `"([^"]{30,})"` // Description
+    , 'i'
+  );
+
+  match = chunkText.match(blockPattern);
+  if (match && match[2]) {
+    console.log(`extractCourseDescriptionFromChunk: Found via block pattern for ${reqSubj} ${reqNum}`);
+    return {
+      description: match[2].trim(),
+      title: match[1] ? match[1].trim() : '',
+      method: 'block_pattern'
+    };
+  }
+
+  // Strategy 4: Find course title first, then look for description nearby
+  // More robust for malformed CSV
+  const titlePattern = new RegExp(
+    `${reqSubj}[,\\s]+${reqNum}[A-Za-z]?[,\\s]+([^,]{5,50})[,\\s]+` // Subject Number Title
+    , 'gi'
+  );
+
+  const titleMatches = [...chunkText.matchAll(titlePattern)];
+  for (const tm of titleMatches) {
+    const titlePos = tm.index + tm[0].length;
+    // Look for a quoted description after the title
+    const afterTitle = chunkText.slice(titlePos, titlePos + 1500);
+    const descMatch = afterTitle.match(/^"([^"]{30,})"/);
+    if (descMatch) {
+      console.log(`extractCourseDescriptionFromChunk: Found via title-first pattern for ${reqSubj} ${reqNum}`);
+      return {
+        description: descMatch[1].trim(),
+        title: tm[1] ? tm[1].trim() : '',
+        method: 'title_first_pattern'
+      };
+    }
+  }
+
+  // Strategy 5: Segment-based extraction
+  // Split by course boundaries and find the right segment
+  const segments = chunkText.split(/\n(?=[A-Z0-9 &\-]+::[A-Z]{2,6}::\d)/);
+  for (const segment of segments) {
+    // Check if this segment is for our course
+    const segmentMatch = segment.match(new RegExp(`::${reqSubj}::${reqNum}[A-Za-z]?\\b`, 'i'));
+    if (segmentMatch) {
+      // Extract description from this segment
+      const descInSegment = segment.match(/"([^"]{50,})"/);
+      if (descInSegment) {
+        console.log(`extractCourseDescriptionFromChunk: Found via segment pattern for ${reqSubj} ${reqNum}`);
+        return {
+          description: descInSegment[1].trim(),
+          title: '',
+          method: 'segment_pattern'
+        };
+      }
+    }
+  }
+
+  console.log(`extractCourseDescriptionFromChunk: No description found for ${reqSubj} ${reqNum}`);
+  return null;
 }
 
 /**
@@ -185,14 +306,8 @@ async function runRagSearchAndBuildCandidates(query) {
     throw new Error('RAG search returned invalid JSON');
   });
 
-  // Defensive: normalize to an array of hits
   let hits = null;
 
-  // Common shapes we expect:
-  // 1) { response: [ ... ] }
-  // 2) { response: { response: [ ... ] } }
-  // 3) { hits: [ ... ] }
-  // 4) { response: { hits: [ ... ] } }
   if (Array.isArray(json.response)) {
     hits = json.response;
     console.log('runRagSearch: using json.response (array), length:', hits.length);
@@ -206,7 +321,6 @@ async function runRagSearchAndBuildCandidates(query) {
     hits = json.response.hits;
     console.log('runRagSearch: using json.response.hits, length:', hits.length);
   } else {
-    // fallback: try to find the first array anywhere in the object (best-effort)
     const allArrays = Object.values(json).filter(v => Array.isArray(v));
     if (allArrays.length > 0) {
       hits = allArrays[0];
@@ -217,15 +331,12 @@ async function runRagSearchAndBuildCandidates(query) {
     }
   }
 
-  // Ensure hits is an array now
   if (!Array.isArray(hits)) {
     console.error('runRagSearch: hits is not an array', hits);
     throw new Error('RAG search returned non-array hits');
   }
 
-  // Map hits to rawCandidates; be defensive with missing fields
   const rawCandidates = hits.map((h, idx) => {
-    // The server sometimes returns items that are strings or objects with "content" etc.
     const content = (typeof h === 'string') ? h : (h.content || h._source?.content || '');
     const sourceName = h.source_name || h._source?.source_name || (h._index ? String(h._index) : 'unknown');
     const score = Number(h.score ?? h._score ?? 0);
@@ -238,7 +349,6 @@ async function runRagSearchAndBuildCandidates(query) {
         source_name: sourceName,
         chunk_number,
         page_number,
-        // institution_normalized extraction will be done by enrichAndAggregate
         institution_normalized: null
       },
       score: score,
@@ -246,20 +356,15 @@ async function runRagSearchAndBuildCandidates(query) {
     };
   });
 
-  // Sort by score descending to make order deterministic
   rawCandidates.sort((a, b) => (b.score - a.score));
 
-  // Debug log top 3
   console.log('runRagSearch: built rawCandidates count=', rawCandidates.length,
     ' top scores:', rawCandidates.slice(0, 3).map(c => c.score));
 
   return rawCandidates;
 }
 
-/**
- * Fetch course data (description and matches) from CreateAI API
- */
-// --- helper functions: transformer + description chooser ---
+// --- helper functions ---
 
 function tokenOverlap(a, b) {
   if (!a || !b) return 0.0;
@@ -273,19 +378,17 @@ function tokenOverlap(a, b) {
 }
 
 function extractFromText(text) {
-  // returns partial metadata if found
   const out = {};
   if (!text || typeof text !== 'string') return out;
-  // Pattern: INSTITUTION::SUBJECT::NUMBER (common in your CSVs)
+
   const m = text.match(/([A-Z0-9 &\-]+)::([A-Z]{2,6})::(\d+[A-Za-z]*)/);
   if (m) {
     out.institution_normalized = m[1].trim();
     out.subject = m[2].trim();
     out.number = m[3].trim();
   }
-  // CSV header style fallback
+
   if (text.includes('CourseSubject') && text.includes('CourseNumber')) {
-    // naive: try to find header line, then a following data line
     const lines = text.split(/\r?\n/);
     let headerIdx = -1;
     for (let i = 0; i < lines.length; i++) {
@@ -303,20 +406,19 @@ function extractFromText(text) {
       }
     }
   }
-  // if not found, attempt to find first 3-digit number as number and preceding uppercase token as subject
+
   if (!out.number) {
     const numMatch = text.match(/(\b\d{3,4}[A-Za-z]?\b)/);
     if (numMatch) out.number = numMatch[1];
   }
   if (!out.subject && out.number) {
-    // try capture a subject token immediately before number
     const subjMatch = text.match(/([A-Z]{2,6})\s+`?\d{3,4}/);
     if (subjMatch) out.subject = subjMatch[1];
   }
-  // try to extract CourseDescription block
+
   const descMatch = text.match(/CourseDescription[^\n]*[:\-\n]\s*([^`]{50,2000})/i);
   if (descMatch) out.description = descMatch[1].trim();
-  // fallback: long sentence heuristic
+
   if (!out.description) {
     const sentences = text.split(/(?<=[.?!])\s+/);
     for (const s of sentences) {
@@ -328,7 +430,6 @@ function extractFromText(text) {
 }
 
 function normalizeScoreField(candidates) {
-  // candidates array of { metadata: {...}, score: number, text: string }
   const rawScores = candidates.map(c => {
     const md = c.metadata || {};
     if (typeof md.norm_score === 'number') return md.norm_score;
@@ -340,7 +441,6 @@ function normalizeScoreField(candidates) {
   if (maxS <= 0) maxS = 1.0;
   return candidates.map((c, idx) => {
     const s = rawScores[idx];
-    // if already in 0..1, keep; else normalize by max
     let norm = (s >= 0 && s <= 1) ? s : (s / maxS);
     if (norm > 1) norm = 1.0;
     c.norm_score = norm;
@@ -349,11 +449,8 @@ function normalizeScoreField(candidates) {
 }
 
 function enrichAndAggregate(rawCandidates) {
-  // rawCandidates: array of objects with possible fields:
-  // { id, metadata, score, text }
   if (!Array.isArray(rawCandidates)) return [];
 
-  // 1) enrich any missing metadata by parsing text
   const candidates = rawCandidates.map((c) => {
     const md = Object.assign({}, c.metadata || {});
     const text = c.text || c.content || '';
@@ -365,7 +462,6 @@ function enrichAndAggregate(rawCandidates) {
       md.title = md.title || parsed.title || '';
       md.description = md.description || parsed.description || '';
     }
-    // parse number base/suffix
     const numStr = String(md.number || '');
     const m = numStr.match(/^(\d+)([A-Za-z]+)?$/);
     md.number_base = m ? m[1] : (md.number_base || '');
@@ -373,10 +469,8 @@ function enrichAndAggregate(rawCandidates) {
     return Object.assign({}, c, { metadata: md });
   });
 
-  // 2) normalize scores to 0..1
   normalizeScoreField(candidates);
 
-  // 3) aggregate by canonical key (inst + subject + number_base) if possible
   const groups = {};
   candidates.forEach(c => {
     const md = c.metadata || {};
@@ -388,7 +482,6 @@ function enrichAndAggregate(rawCandidates) {
     groups[key].push(c);
   });
 
-  // 4) pick representative per group (highest norm_score) and choose longest description >=30 chars
   const final = Object.keys(groups).map(key => {
     const group = groups[key];
     group.sort((a, b) => (b.norm_score || 0) - (a.norm_score || 0));
@@ -396,7 +489,6 @@ function enrichAndAggregate(rawCandidates) {
     let descriptions = group.map(g => (g.metadata && g.metadata.description) || g.text || '').filter(Boolean);
     descriptions = descriptions.filter(d => d.length >= 30);
     const chosenDescription = descriptions.length ? descriptions.sort((a, b) => b.length - a.length)[0] : '';
-    // ensure fields exist
     const md = Object.assign({}, rep.metadata || {});
     if (!md.description) md.description = chosenDescription;
     return {
@@ -414,25 +506,82 @@ function enrichAndAggregate(rawCandidates) {
     };
   });
 
-  // sort final by norm_score desc
   final.sort((a, b) => (b.norm_score || 0) - (a.norm_score || 0));
   return final;
 }
 
-// Choose a single description candidate from enriched 'rawCandidates'.
-// rawCandidates: [{ id, text, score, metadata:{...} }, ...]
-// requestedNumberBase: string like "2251"
-function chooseDescriptionCandidate(rawCandidates, requestedNumberBase) {
+/**
+ * IMPROVED: Choose a single description candidate from enriched 'rawCandidates'.
+ * Now properly extracts the SPECIFIC course description from chunks containing multiple courses.
+ */
+function chooseDescriptionCandidate(rawCandidates, requestedSubject, requestedNumber) {
   if (!Array.isArray(rawCandidates) || rawCandidates.length === 0) return null;
 
-  // Map candidate -> parsed course fields (best-effort)
+  const reqSubj = (requestedSubject || '').toUpperCase().trim();
+  const reqNumBase = (requestedNumber || '').toString().replace(/[^0-9]/g, '');
+
+  console.log(`chooseDescriptionCandidate: Looking for ${reqSubj} ${reqNumBase}`);
+
+  // First pass: Try to extract the specific course description from each chunk
+  const extractedCandidates = [];
+
+  for (const c of rawCandidates) {
+    const text = (c.text || '').trim();
+    if (!text) continue;
+
+    // Check if this chunk mentions our course
+    const coursePattern = new RegExp(`${reqSubj}[^A-Za-z0-9]*${reqNumBase}`, 'i');
+    if (!coursePattern.test(text)) {
+      continue; // Skip chunks that don't mention our course at all
+    }
+
+    // Try to extract the specific description for our course
+    const extracted = extractCourseDescriptionFromChunk(text, reqSubj, reqNumBase);
+
+    if (extracted && extracted.description && extracted.description.length >= 40) {
+      extractedCandidates.push({
+        ...c,
+        extractedDescription: extracted.description,
+        extractedTitle: extracted.title,
+        extractionMethod: extracted.method,
+        descriptionLength: extracted.description.length
+      });
+    }
+  }
+
+  // If we found specific course descriptions, use those
+  if (extractedCandidates.length > 0) {
+    // Sort by score desc, then by description length desc
+    extractedCandidates.sort((a, b) =>
+      (b.score - a.score) || (b.descriptionLength - a.descriptionLength)
+    );
+
+    const best = extractedCandidates[0];
+    console.log(`chooseDescriptionCandidate: Found specific description via ${best.extractionMethod}, length: ${best.descriptionLength}`);
+
+    return {
+      text: best.extractedDescription,
+      sourceId: best.id,
+      score: best.score,
+      title: best.extractedTitle,
+      parsed: {
+        subject: reqSubj,
+        number: reqNumBase,
+        numberBase: reqNumBase
+      },
+      extractionMethod: best.extractionMethod
+    };
+  }
+
+  // Fallback: Use the old logic but with stricter validation
+  console.log('chooseDescriptionCandidate: No specific extraction worked, using fallback logic');
+
   const candidates = rawCandidates.map(c => {
     const text = (c.text || '').replace(/\s+/g, ' ').trim();
-    // try to find subject/number in the chunk (very conservative regex)
     const numMatch = text.match(/\b([A-Z]{2,5})\s*[:.-]?\s*(\d{2,4}[A-Za-z]?)\b/i);
-    const subject = numMatch ? (numMatch[1] || '').toUpperCase() : (c.metadata.subject || '').toUpperCase();
-    const number = numMatch ? (numMatch[2] || '') : (c.metadata.number || '');
-    const numberBase = (String(number).match(/\d+/) || [])[0] || requestedNumberBase || '';
+    const subject = numMatch ? (numMatch[1] || '').toUpperCase() : (c.metadata?.subject || '').toUpperCase();
+    const number = numMatch ? (numMatch[2] || '') : (c.metadata?.number || '');
+    const numberBase = (String(number).match(/\d+/) || [])[0] || reqNumBase || '';
     return {
       ...c,
       parsed: { subject, number, numberBase },
@@ -441,35 +590,36 @@ function chooseDescriptionCandidate(rawCandidates, requestedNumberBase) {
     };
   });
 
-  // Prefer same numberBase, higher score, longer description
-  const withBase = candidates.filter(x => x.parsed.numberBase === String(requestedNumberBase));
-  const pool = withBase.length ? withBase : candidates;
+  // Filter to only candidates matching our course number
+  const matchingCandidates = candidates.filter(x => x.parsed.numberBase === reqNumBase);
+  const pool = matchingCandidates.length > 0 ? matchingCandidates : candidates;
 
-  // Sort by score desc, then by description length desc
   pool.sort((a, b) => (b.score - a.score) || (b.descriptionLength - a.descriptionLength));
 
-  // Choose the top candidate only if it has a reasonable length and score
   const top = pool[0];
   if (!top) return null;
 
-  // Thresholds for allowing injection
-  const MIN_SCORE = 0.5;          // normalized score space (adjust as needed)
-  const MIN_DESC_LENGTH = 40;     // avoid injecting tiny snippets
+  const MIN_SCORE = 0.5;
+  const MIN_DESC_LENGTH = 40;
 
   if ((top.score >= MIN_SCORE) && (top.descriptionLength >= MIN_DESC_LENGTH)) {
-    return { text: top.text, sourceId: top.id, score: top.score, parsed: top.parsed };
+    return {
+      text: top.text,
+      sourceId: top.id,
+      score: top.score,
+      parsed: top.parsed,
+      extractionMethod: 'fallback'
+    };
   }
+
   return null;
 }
-
-// --- end helpers ---
 
 /**
  * Fetch course data (description and matches) from CreateAI API
  */
 async function fetchCourseData(courseData) {
   try {
-    // Get token from storage
     const storage = await chrome.storage.local.get({ createaiToken: '' });
     const token = storage.createaiToken;
 
@@ -486,20 +636,21 @@ async function fetchCourseData(courseData) {
     const query = `${institution} ${subject} ${number} ${title}`.trim();
     console.log('Fetching CreateAI data for query:', query);
 
-    // If the caller provided rawCandidates / sources locally, OR if we need to fetch them
     let rawCandidates = courseData.rawCandidates || [];
     if (rawCandidates.length === 0) {
       console.log('No rawCandidates provided, performing dynamic RAG search...');
       rawCandidates = await runRagSearchAndBuildCandidates(query);
     }
 
-    // Build auxiliary prompt information from RAG results
+    // Build auxiliary prompt with extracted description
     let systemPromptAux = '';
     let chosen = null;
+
     if (Array.isArray(rawCandidates) && rawCandidates.length > 0) {
-      chosen = chooseDescriptionCandidate(rawCandidates, number || '');
+      // IMPROVED: Pass subject AND number for proper extraction
+      chosen = chooseDescriptionCandidate(rawCandidates, subject, number);
+
       if (chosen) {
-        // Truncate to safe length (e.g., 2000 chars) to avoid context overflow
         const maxLen = 2000;
         const chosenText = chosen.text.length > maxLen ? chosen.text.slice(0, maxLen) : chosen.text;
 
@@ -515,8 +666,6 @@ If a description candidate is provided between the markers above, the assistant 
       }
     }
 
-    // Build payload and inject system prompt auxiliary if available
-    // Build payload and inject system prompt auxiliary if available
     const baseSystemPrompt = `You are a course catalog validation and course matching assistant.
 
 GOAL
@@ -629,7 +778,12 @@ Return ONLY this JSON object matching types exactly:
 }`;
     const finalSystemPrompt = baseSystemPrompt + systemPromptAux;
 
-    console.log('RAG chosen candidate:', chosen ? { id: chosen.sourceId, score: chosen.score, len: chosen.text.length } : null);
+    console.log('RAG chosen candidate:', chosen ? {
+      id: chosen.sourceId,
+      score: chosen.score,
+      len: chosen.text.length,
+      method: chosen.extractionMethod
+    } : null);
     console.log('Final system prompt contains candidate:', !!systemPromptAux);
 
     const payload = {
@@ -669,13 +823,11 @@ Return ONLY this JSON object matching types exactly:
     const data = await response.json();
     console.log('CreateAI Raw Response:', data);
 
-    // --- existing response parsing remains the same as before ---
     try {
       let responseText = data.response;
       responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
       const innerResponse = JSON.parse(responseText);
 
-      // Normalize description
       innerResponse.input_course_description = (innerResponse.input_course_description || '').trim();
       if (innerResponse.input_course_description.length < 10) {
         innerResponse.input_course_description = '';
@@ -687,7 +839,7 @@ Return ONLY this JSON object matching types exactly:
       const reflectedTitle = innerResponse.title || '';
       const catalogStatus = innerResponse.catalog_status || '';
 
-      // Classification Logic (same as your existing logic)
+      // Classification Logic
       let matchType = 'no_match';
       let similarity = 0;
       let isMissingCourse = false;
@@ -729,43 +881,40 @@ Return ONLY this JSON object matching types exactly:
       const ALLOW_DESC_POP_SIMILARITY = 0.8;
       const allowPopulateDescription = (similarity >= ALLOW_DESC_POP_SIMILARITY);
 
+      // IMPROVED: JS fallback now uses the properly extracted description
       if ((!description || description.toLowerCase().includes('cannot find')) && chosen && allowPopulateDescription) {
         console.warn('LLM omitted description — filling from deterministic candidate.');
 
-        // Attempt to extract cleaner description from raw chunk
-        const extracted = extractFromText(chosen.text);
-        let fallbackDesc = extracted.description;
+        // The chosen.text is now already the properly extracted description (not the whole chunk)
+        let fallbackDesc = chosen.text;
 
-        // If extraction failed or returned something too short, use refined raw text
-        if (!fallbackDesc || fallbackDesc.length < 20) {
-          fallbackDesc = chosen.text;
-          // 1. If it looks like JSON, try to parse it
-          // 2. Otherwise just take a reasonable substring
-        }
-
-        // Final sanity check on length
-        if (fallbackDesc.length > 500) {
-          // Heuristic: find first double newline or just truncate
-          const split = fallbackDesc.split(/\n\s*\n/);
-          if (split.length > 1 && split[0].length > 50) {
-            fallbackDesc = split[0];
+        // Sanity check on length - the extraction should have already done this
+        if (fallbackDesc.length > 800) {
+          // Find a natural break point
+          const sentences = fallbackDesc.split(/(?<=[.!?])\s+/);
+          let truncated = '';
+          for (const s of sentences) {
+            if ((truncated + s).length > 700) break;
+            truncated += (truncated ? ' ' : '') + s;
+          }
+          if (truncated.length >= 50) {
+            fallbackDesc = truncated;
           } else {
-            fallbackDesc = fallbackDesc.slice(0, 500) + '...';
+            fallbackDesc = fallbackDesc.slice(0, 700) + '...';
           }
         }
 
         description = fallbackDesc;
 
-        // Optionally inject an audit field
         innerResponse._injected_description = {
           sourceId: chosen.sourceId,
           score: chosen.score,
           injected_by: 'js_fallback',
+          extraction_method: chosen.extractionMethod,
           original_len: chosen.text.length,
           final_len: description.length
         };
 
-        // Important: Update the missing flag so UI doesn't say "description missing"
         isMissingCourse = false;
       }
 
@@ -793,11 +942,9 @@ Return ONLY this JSON object matching types exactly:
         });
       }
 
-      // Fallback: If no matches found by LLM, try to extract from description or text
+      // Fallback: Extract matches from text
       if (matches.length === 0 && matchType !== 'catalog_not_found') {
         const textToSearch = (description || '') + (chosen ? (' ' + chosen.text) : '');
-        // Regex to find "ASU Match: ABC 123" patterns
-        // Supporting formats: "ASU Match: ABC 123", "Equivalent: ABC 123", "ABC 123" if preceded by "ASU"
         const matchRegex = /(?:ASU(?:\s+Match)?|Equivalent)[:\s]+([A-Z]{3})\s+(\d{3}[A-Z]?)/gi;
         let m;
         const seen = new Set();
@@ -810,7 +957,7 @@ Return ONLY this JSON object matching types exactly:
             matches.push({
               subject: subj,
               number: num,
-              title: 'ASU Equivalent', // We might not have the title, but better than nothing
+              title: 'ASU Equivalent',
               description: 'Extracted from catalog text.'
             });
           }

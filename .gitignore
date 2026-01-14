@@ -5,3 +5,5 @@ node_modules/
 INSTALLATION.md
 PROJECT_SUMMARY.md
 QUICKSTART.md
+data/
+misc/

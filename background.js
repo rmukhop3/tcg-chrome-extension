@@ -161,21 +161,29 @@ async function fetchCourseData(courseData) {
 
     // ... rest of the payload and fetch logic stays same ...
     const payload = {
+      // "action": "query",
+      // "request_source": "override_params",
       "model_provider": "openai",
-      "model_name": "gpt4o",
+      "model_name": "gpt5_2",
+      // "session_id": "test_rmukhop3_01_13_2026_v1",
       "model_params": {
-        "temperature": 0.1,
+        "temperature": 0.0,
         "max_tokens": 2000,
-        "system_prompt": "You are a helpful assistant who validates course details. You will be provided with a course (Subject, Number, Title) and an Institution.\n\n### 1. Catalog Search\nFirst, determine if the Institution's course catalog is available in your knowledge base.\n- If the catalog is NOT found or the institution is unrecognized: Set \"catalog_status\" to \"not_indexed\".\n- If the catalog is found: Set \"catalog_status\" to \"found\" and provide the \"reflected_institution\" name as found in your knowledge base.\n\n### 2. Course Validation\nIf the catalog is found, search for the specific course.\n- If the exact or a highly similar course (e.g., matching a lab or lecture version like BIOL 2251 to 2251L) is found: Provide the \"subject\", \"number\", \"title\", and \"input_course_description\" from the catalog.\n- If no related course is found: Set \"input_course_description\" to \"Cannot find the course description\".\n\n### 3. Equivalent Matches\nProvide exactly 3 matches from ASU for the input course.\n\n### Output Format\nAlways respond in the following JSON format:\n{\n\"catalog_status\": \"found\" | \"not_indexed\",\n\"reflected_institution\": \"Full Institution Name found in catalog\",\n\"subject\": \"The Subject found (e.g. PSY)\",\n\"number\": \"The Number found (e.g. 101, should be an int and not float)\",\n\"title\": \"The Course Title found\",\n\"input_course_description\": \"Direct catalog text OR 'Cannot find the course description'\",\n\"matches\": {\n\"match_1\": { \"subject\": \"\", \"number\": \"\", \"title\": \"\", \"description\": \"\" },\n\"match_2\": { \"subject\": \"\", \"number\": \"\", \"title\": \"\", \"description\": \"\" },\n\"match_3\": { \"subject\": \"\", \"number\": \"\", \"title\": \"\", \"description\": \"\" }\n}\n}",
+        "system_prompt": "",
         "top_k": 3
       },
       "query": query,
       "enable_search": true,
       "search_params": {
         "db_type": "opensearch",
+        // "retrieval_type": "neighbor",
         "collection": "0cc3f744a8c740b0b36afb154d07ae24",
-        "top_k": 3,
-        "output_fields": ["content", "source_name", "page_number", "source_type", "chunk_number"]
+        // "prompt_mode": "unrestricted",
+        // "rerank": true,
+        // "rerank_provider": "aws",
+        // "reranker_model": "cohere_rerank-3_5",
+        // "top_n": 3,
+        "output_fields": ["content", "source_name"]
       },
       "response_format": { "type": "json" }
     };
@@ -210,7 +218,6 @@ async function fetchCourseData(courseData) {
       const reflectedSubject = innerResponse.subject || '';
       const reflectedNumber = innerResponse.number || '';
       const reflectedTitle = innerResponse.title || '';
-      const reflectedInstitution = innerResponse.reflected_institution || '';
       const catalogStatus = innerResponse.catalog_status || '';
 
       // Classification Logic
@@ -221,16 +228,12 @@ async function fetchCourseData(courseData) {
       const lowerDesc = (description || '').toLowerCase();
 
       // Step 1: Validate Institution
-      let isInstitutionValid = validateInstitution(courseData.institution, reflectedInstitution);
+      // Since the AI now performs normalized matching itself, we trust catalog_status
+      let isInstitutionValid = (catalogStatus === 'found');
 
-      // Fallback: If AI explicitly says catalog is found, or if we have a significant description
-      if (!isInstitutionValid) {
-        if (catalogStatus === 'found') {
-          isInstitutionValid = true;
-        } else if (description && description.length > 50 && !lowerDesc.includes('cannot find')) {
-          // If description is long and doesn't look like a "not found" message, trust the catalog exists
-          isInstitutionValid = true;
-        }
+      // Fallback: If description is long and doesn't look like a "not found" message, trust the catalog exists
+      if (!isInstitutionValid && description && description.length > 50 && !lowerDesc.includes('cannot find')) {
+        isInstitutionValid = true;
       }
 
       // Step 2: Check for Catalog Level Failure keywords
@@ -241,11 +244,7 @@ async function fetchCourseData(courseData) {
         catalogStatus === 'not_indexed' ||
         catalogStatus === 'not_found';
 
-      if (!isInstitutionValid) {
-        // User Requirement: Check explicit institution validation for "Catalog Not Found"
-        matchType = 'catalog_not_found';
-      } else if (isMissingCatalogKeyword) {
-        // Also fallback to keywords if the AI explicitly says it can't find the institution
+      if (!isInstitutionValid || isMissingCatalogKeyword) {
         matchType = 'catalog_not_found';
       } else {
         // Step 3: Course Level Validation

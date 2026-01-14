@@ -519,6 +519,7 @@ function generatePopupHTML(courseData, response) {
         label = 'Exact Match';
         className = 'match-status--exact';
         break;
+      case 'strong_fuzzy':
       case 'fuzzy':
         icon = '<svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>';
         label = 'Fuzzy Match';
@@ -546,6 +547,9 @@ function generatePopupHTML(courseData, response) {
     `;
   };
 
+  const isFuzzy = (matchType === 'fuzzy' || matchType === 'strong_fuzzy');
+  const isMatch = (matchType === 'exact' || isFuzzy);
+
   return `
     <section class="overlay" role="dialog" aria-labelledby="course-title">
       <button class="overlay__action" type="button" aria-label="Toggle course details" aria-expanded="true"></button>
@@ -559,7 +563,7 @@ function generatePopupHTML(courseData, response) {
 
           ${!isLoading && !isError ? getStatusIndicatorHTML(matchType) : ''}
 
-          ${!isLoading && !isError && matchType === 'fuzzy' && reflectedCourse && reflectedCourse.subject ? `
+          ${!isLoading && !isError && isFuzzy && reflectedCourse && reflectedCourse.subject ? `
             <div class="reflected-header" style="margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--divider);">
               <h1 class="reflected-title">
                 ${reflectedCourse.title || 'Catalog Match'}
@@ -569,7 +573,7 @@ function generatePopupHTML(courseData, response) {
           ` : ''}
         </header>
 
-        ${!isLoading && !isError && (matchType === 'exact' || matchType === 'fuzzy') ? `
+        ${!isLoading && !isError && isMatch ? `
         <section class="description" aria-label="Course description">
           <p class="section-label">Course Description</p>
           <p>
@@ -584,11 +588,11 @@ function generatePopupHTML(courseData, response) {
         </section>
         ` : ''}
 
-        ${!isLoading && !isError && (matchType === 'exact' || matchType === 'fuzzy') ? `
+        ${!isLoading && !isError && isMatch ? `
         <div id="matches-container">
           ${isLoading ? '<section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>' : ''}
           ${isError ? `<section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>` : ''}
-          ${hasMatches ? generateMatchesHTML(response.matches) : ''}
+          ${hasMatches ? generateMatchesHTML(response.matches) : '<section class="matches"><p style="text-align: center; color: #666; padding: 20px; font-style: italic;">No equivalent courses found at ASU.</p></section>'}
         </div>
         ` : isLoading ? `
         <div id="matches-container">

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Triangulator Course Matcher",
-  "version": "1.0.2",
+  "version": "1.0.2.7",
   "description": "AI-curated catalogs, human-reviewed and refined with AI generative matching",
   "permissions": [
     "activeTab",

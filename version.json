@@ -1,5 +1,5 @@
 {
-    "version": "1.0.1",
-    "last_updated": "2026-01-07",
-    "description": "Whitelisted transferguide prod url for the extension"
+    "version": "1.0.2",
+    "last_updated": "2026-01-14",
+    "description": "Change system prompt and use gpt4_1 model"
 }

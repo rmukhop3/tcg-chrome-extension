@@ -1,15 +1,15 @@
-// background.js - ASU CreateAI API integration (OPTIMIZED v3.6)
+// background.js - ASU CreateAI API integration (OPTIMIZED v3.9)
 // 
-// Fixes in v3.6:
-// 1. FILTER ASU matches without valid descriptions (zero latency - just array filtering)
-// 2. Added debug logging to show which matches are filtered and why
-// 3. Prevents showing "3 of 3" when only 1 match has a description
+// Fixes in v3.9:
+// 1. CRITICAL FIX: Corrected catalog detection logic
+//    - If institution found in RAG results → catalog IS indexed → no_match
+//    - Only return catalog_not_found when institution truly NOT in database
+// 2. Removed RAG score thresholds for catalog detection (was causing false positives)
+// 3. Clear rule: Found institution = catalog exists, missing course = no_match
 // 
 // Previous fixes:
-// - Clear distinction between CATALOG_NOT_FOUND and NO_MATCH
-// - Secondary catalog check after extraction to catch false negatives
+// - Filter ASU matches without valid descriptions
 // - Comprehensive ASU match collection from all course variants
-// - Missing descriptions return no_match instead of calling LLM
 
 const API_CONFIG = {
   searchUrl: 'https://api-main-poc.aiml.asu.edu/search',
@@ -661,8 +661,14 @@ async function fetchCourseData(courseData) {
         }
       }
 
+      // CRITICAL LOGIC:
+      // If we found the institution in RAG results, the catalog IS indexed
+      // The fact that we can't extract THIS specific course means the course description is missing
+      // This is "no_match", not "catalog_not_found"
+      //
+      // Only return "catalog_not_found" if we genuinely can't find the institution
       if (!foundAnyInstitutionMatch) {
-        console.log('⚡ FAST PATH: Catalog not found (no institution matches in extraction)');
+        console.log(`⚡ FAST PATH: Catalog not found (no institution matches in top results)`);
 
         return buildResponse({
           matchType: 'catalog_not_found',
@@ -672,9 +678,13 @@ async function fetchCourseData(courseData) {
           matches: [],
           elapsedMs: Date.now() - startTime,
           path: 'fast_catalog_not_found_after_extraction',
-          reason: 'no_valid_extraction'
+          reason: 'no_institution_found'
         });
       }
+
+      // If we found the institution but couldn't extract the course, continue to description check
+      // This will return "no_match" for this specific course
+      console.log(`  Institution IS indexed, but this specific course description is missing`);
     }
 
     // ========================================
@@ -996,5 +1006,5 @@ function buildResponse(params) {
   return response;
 }
 
-console.log('Triangulator extension (OPTIMIZED v3.6) loaded');
+console.log('Triangulator extension (OPTIMIZED v3.9) loaded');
 console.log('Config:', CONFIG);

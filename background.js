@@ -790,7 +790,7 @@ async function fetchCourseData(courseData) {
     // CRITICAL FIX: If description is missing, return no_match immediately
     // Course equivalency cannot be validated without a description to compare
     // ========================================
-    if (descriptionMissing || !description || description === `Cannot find the course description`) {
+    if (descriptionMissing || !description || description === 'Cannot find the course description') {
       console.log('⚡ FAST PATH: Description missing - returning no_match without LLM call');
       console.log(`  Attempted match type was: ${matchType}`);
 

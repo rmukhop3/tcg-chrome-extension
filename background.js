@@ -30,7 +30,10 @@ const CONFIG = {
   // LLM optimization settings
   llmMaxContextChars: 2500,    // Reduced from 4500 to speed up
   llmMaxTokens: 800,           // Reduced from 1500
-  llmModel: "nova-lite"        // Can change to faster model if available
+  llmModel: "nova-lite",       // Can change to faster model if available
+
+  // Description validation
+  invalidDescriptionText: 'cannot find' // Magic string for invalid descriptions
 };
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -407,7 +410,7 @@ function isValidAsuDescription(description) {
   }
 
   const lower = description.toLowerCase();
-  return description.length >= 30 && !lower.includes('cannot find');
+  return description.length >= 30 && !lower.includes(CONFIG.invalidDescriptionText);
 }
 
 /**
@@ -787,7 +790,7 @@ async function fetchCourseData(courseData) {
     // CRITICAL FIX: If description is missing, return no_match immediately
     // Course equivalency cannot be validated without a description to compare
     // ========================================
-    if (descriptionMissing || !description || description === 'Cannot find the course description') {
+    if (descriptionMissing || !description || description === `Cannot find the course description`) {
       console.log('⚡ FAST PATH: Description missing - returning no_match without LLM call');
       console.log(`  Attempted match type was: ${matchType}`);
 
@@ -870,21 +873,26 @@ async function fetchCourseData(courseData) {
       const llmDescLower = (llmDescription || '').toLowerCase();
       const llmHasValidDesc = llmDescription &&
         llmDescription.length >= 30 &&
-        !llmDescLower.includes('cannot find');
+        !llmDescLower.includes(CONFIG.invalidDescriptionText);
 
       // Only use description if it's an exact or fuzzy match
       if (matchType === 'exact' && llmHasValidDesc) {
         description = llmDescription;
         descriptionMissing = false;
       } else if ((matchType === 'fuzzy' || matchType === 'strong_fuzzy')) {
-        // For fuzzy matches, show description but mark as missing since it's not for the exact course
+        // For fuzzy matches, show the related course description
+        // But mark descriptionMissing based on whether description actually exists
         if (llmHasValidDesc) {
           description = llmDescription;
-          descriptionMissing = true; // Still mark as missing since it's fuzzy
+          descriptionMissing = false; // Description exists, just for a related course
         } else if (extractedCourse?.description) {
           description = extractedCourse.description;
-          descriptionMissing = true;
+          descriptionMissing = false; // Description exists, just for a related course
+        } else {
+          descriptionMissing = true; // Genuinely no description available
         }
+      } else {
+        descriptionMissing = true; // No match or no description
       }
 
       // Parse LLM matches

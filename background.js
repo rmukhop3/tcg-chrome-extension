@@ -1,13 +1,12 @@
-// background.js - ASU CreateAI API integration (OPTIMIZED v3.9)
+// background.js - ASU CreateAI API integration (OPTIMIZED v3.10)
 // 
-// Fixes in v3.9:
-// 1. CRITICAL FIX: Corrected catalog detection logic
-//    - If institution found in RAG results → catalog IS indexed → no_match
-//    - Only return catalog_not_found when institution truly NOT in database
-// 2. Removed RAG score thresholds for catalog detection (was causing false positives)
-// 3. Clear rule: Found institution = catalog exists, missing course = no_match
+// Fixes in v3.10:
+// 1. Check top 10 RAG candidates (instead of 5) when looking for institution
+// 2. More lenient catalog detection - helps catch institutions deeper in results
+// 3. Reduces false "catalog_not_found" when institution IS indexed but appears deeper
 // 
 // Previous fixes:
+// - Corrected catalog detection: found institution = no_match, not catalog_not_found
 // - Filter ASU matches without valid descriptions
 // - Comprehensive ASU match collection from all course variants
 
@@ -647,28 +646,30 @@ async function fetchCourseData(courseData) {
       console.log('No valid course extracted - checking if catalog is indexed...');
 
       // Check if we can find ANY course from this institution in the RAG results
+      // Check top 10 candidates (expanded from 5) to handle cases where institution
+      // appears deeper in results
       let foundAnyInstitutionMatch = false;
-      for (const candidate of ragCandidates.slice(0, 5)) {
+      let checkedCandidates = 0;
+
+      for (const candidate of ragCandidates.slice(0, 10)) {
+        checkedCandidates++;
         const instMatch = candidate.text.match(/([A-Z0-9 &\-]+)::[A-Z]{2,6}::\d/i);
         if (instMatch) {
           const foundInst = instMatch[1].trim();
           const { matches } = checkInstitutionMatch(institution, foundInst);
           if (matches) {
             foundAnyInstitutionMatch = true;
-            console.log(`  Found institution match: ${foundInst}`);
+            console.log(`  Found institution match: ${foundInst} (in candidate ${checkedCandidates})`);
             break;
           }
         }
       }
 
       // CRITICAL LOGIC:
-      // If we found the institution in RAG results, the catalog IS indexed
-      // The fact that we can't extract THIS specific course means the course description is missing
-      // This is "no_match", not "catalog_not_found"
-      //
-      // Only return "catalog_not_found" if we genuinely can't find the institution
+      // If we found the institution in RAG results (even deep in the list),
+      // the catalog IS indexed. Missing course = no_match, not catalog_not_found
       if (!foundAnyInstitutionMatch) {
-        console.log(`⚡ FAST PATH: Catalog not found (no institution matches in top results)`);
+        console.log(`⚡ FAST PATH: Catalog not found (no institution matches in top ${checkedCandidates} results)`);
 
         return buildResponse({
           matchType: 'catalog_not_found',
@@ -1006,5 +1007,5 @@ function buildResponse(params) {
   return response;
 }
 
-console.log('Triangulator extension (OPTIMIZED v3.9) loaded');
+console.log('Triangulator extension (OPTIMIZED v3.10) loaded');
 console.log('Config:', CONFIG);

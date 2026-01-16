@@ -382,9 +382,7 @@ function filterValidAsuMatches(matches) {
   if (!matches || matches.length === 0) return [];
 
   const filtered = matches.filter((match, idx) => {
-    const hasValidDescription = match.description &&
-      match.description.length >= 30 &&
-      !match.description.toLowerCase().includes('cannot find');
+    const hasValidDescription = isValidAsuDescription(match.description);
 
     if (!hasValidDescription) {
       console.log(`  ❌ Filtered out match ${idx + 1}: ${match.subject} ${match.number} (desc length: ${match.description?.length || 0})`);
@@ -396,6 +394,20 @@ function filterValidAsuMatches(matches) {
   });
 
   return filtered;
+}
+
+/**
+ * Validate if an ASU course description is valid and meaningful
+ * @param {string} description - The course description to validate
+ * @returns {boolean} - True if description is valid (>= 30 chars and not "cannot find")
+ */
+function isValidAsuDescription(description) {
+  if (!description) {
+    return false;
+  }
+
+  const lower = description.toLowerCase();
+  return description.length >= 30 && !lower.includes('cannot find');
 }
 
 /**
@@ -436,9 +448,7 @@ function collectAllAsuMatches(ragCandidates, institution, subject, numberBase) {
 
         // CRITICAL: Only include matches that have valid descriptions
         // This prevents showing "3 of 3" when only 1 has a description
-        const hasValidDescription = asuMatch.description &&
-          asuMatch.description.length >= 30 &&
-          !asuMatch.description.toLowerCase().includes('cannot find');
+        const hasValidDescription = isValidAsuDescription(asuMatch.description);
 
         if (!seen.has(asuKey)) {
           if (hasValidDescription) {

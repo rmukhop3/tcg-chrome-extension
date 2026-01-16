@@ -1,9 +1,15 @@
-// background.js - ASU CreateAI API integration (OPTIMIZED v3.2)
+// background.js - ASU CreateAI API integration (OPTIMIZED v3.6)
 // 
-// Key fix: Proper course number suffix handling
-// - BIOL 2251L (lab) should NOT be exact match with BIOL 2251 (lecture)
-// - Must compare FULL course number including suffix
-// - Lab courses without lab data should be fuzzy match at best
+// Fixes in v3.6:
+// 1. FILTER ASU matches without valid descriptions (zero latency - just array filtering)
+// 2. Added debug logging to show which matches are filtered and why
+// 3. Prevents showing "3 of 3" when only 1 match has a description
+// 
+// Previous fixes:
+// - Clear distinction between CATALOG_NOT_FOUND and NO_MATCH
+// - Secondary catalog check after extraction to catch false negatives
+// - Comprehensive ASU match collection from all course variants
+// - Missing descriptions return no_match instead of calling LLM
 
 const API_CONFIG = {
   searchUrl: 'https://api-main-poc.aiml.asu.edu/search',
@@ -20,7 +26,12 @@ const CONFIG = {
   catalogNotFoundThresholds: {
     maxTopScore: 12.0,
     minInstitutionMatchRatio: 0.4
-  }
+  },
+
+  // LLM optimization settings
+  llmMaxContextChars: 2500,    // Reduced from 4500 to speed up
+  llmMaxTokens: 800,           // Reduced from 1500
+  llmModel: "nova-lite"        // Can change to faster model if available
 };
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -71,8 +82,6 @@ function editDistance(s1, s2) {
 
 /**
  * Parse course number into base and suffix
- * "2251L" -> { base: "2251", suffix: "L", full: "2251L" }
- * "2251" -> { base: "2251", suffix: "", full: "2251" }
  */
 function parseCourseNumber(number) {
   const numStr = (number || '').toString().trim().toUpperCase();
@@ -95,9 +104,6 @@ function parseCourseNumber(number) {
 
 /**
  * Classify match type based on subject and FULL course number (including suffix)
- * 
- * CRITICAL: BIOL 2251L != BIOL 2251
- * - Same base number but different suffix = FUZZY match, not EXACT
  */
 function classifyMatch(requestedSubject, requestedNumber, foundSubject, foundNumber) {
   const reqSubj = (requestedSubject || '').toUpperCase().trim();
@@ -105,10 +111,6 @@ function classifyMatch(requestedSubject, requestedNumber, foundSubject, foundNum
 
   const reqNum = parseCourseNumber(requestedNumber);
   const foundNum = parseCourseNumber(foundNumber);
-
-  console.log(`  Comparing: ${reqSubj} ${reqNum.full} vs ${foundSubj} ${foundNum.full}`);
-  console.log(`    Requested: base=${reqNum.base}, suffix="${reqNum.suffix}"`);
-  console.log(`    Found: base=${foundNum.base}, suffix="${foundNum.suffix}"`);
 
   // Check subject match
   const subjectMatches = reqSubj === foundSubj;
@@ -122,33 +124,22 @@ function classifyMatch(requestedSubject, requestedNumber, foundSubject, foundNum
   let similarity = 0;
 
   if (subjectMatches && fullNumberMatches) {
-    // Perfect match: BIOL 2251L == BIOL 2251L
     matchType = 'exact';
     similarity = 1.0;
   } else if (subjectMatches && baseMatches && !suffixMatches) {
-    // Same base but different suffix: BIOL 2251L vs BIOL 2251
-    // This is a FUZZY match - the lab and lecture are related but not the same
     if (reqNum.suffix && !foundNum.suffix) {
-      // Requested has suffix (e.g., 2251L), found doesn't (e.g., 2251)
-      // This means we're looking for a lab but found the lecture
-      matchType = 'fuzzy';
-      similarity = 0.85; // High similarity but NOT exact
-      console.log(`    -> Suffix mismatch: requested "${reqNum.suffix}" but found "${foundNum.suffix}"`);
-    } else if (!reqNum.suffix && foundNum.suffix) {
-      // Requested doesn't have suffix, found does
       matchType = 'fuzzy';
       similarity = 0.85;
-      console.log(`    -> Suffix mismatch: requested no suffix but found "${foundNum.suffix}"`);
+    } else if (!reqNum.suffix && foundNum.suffix) {
+      matchType = 'fuzzy';
+      similarity = 0.85;
     } else {
-      // Both have different suffixes
       matchType = 'fuzzy';
       similarity = 0.80;
-      console.log(`    -> Different suffixes: "${reqNum.suffix}" vs "${foundNum.suffix}"`);
     }
   } else if (subjectMatches) {
-    // Subject matches but numbers don't
     const numSimilarity = calculateSimilarity(reqNum.full, foundNum.full);
-    similarity = numSimilarity * 0.9; // Slight penalty
+    similarity = numSimilarity * 0.9;
 
     if (similarity >= 0.85) {
       matchType = 'strong_fuzzy';
@@ -156,7 +147,7 @@ function classifyMatch(requestedSubject, requestedNumber, foundSubject, foundNum
       matchType = 'fuzzy';
     }
   } else {
-    // Different subjects - use full string comparison
+    // Different subjects - this should NOT be exact match
     const fullReq = `${reqSubj} ${reqNum.full}`;
     const fullFound = `${foundSubj} ${foundNum.full}`;
     similarity = calculateSimilarity(fullReq, fullFound);
@@ -166,9 +157,8 @@ function classifyMatch(requestedSubject, requestedNumber, foundSubject, foundNum
     } else if (similarity >= 0.70) {
       matchType = 'fuzzy';
     }
+    // If subjects don't match, similarity is at most ~0.7, never exact
   }
-
-  console.log(`    -> Result: ${matchType} (similarity: ${similarity.toFixed(2)})`);
 
   return { matchType, similarity };
 }
@@ -259,9 +249,6 @@ function detectCatalogNotFound(ragCandidates, requestedInstitution, requestedSub
     }
   }
 
-  // Note: We do NOT check for specific course here anymore
-  // That's handled by the extraction logic
-
   return { notFound: false };
 }
 
@@ -269,13 +256,6 @@ function detectCatalogNotFound(ragCandidates, requestedInstitution, requestedSub
 // COURSE DATA EXTRACTION
 // ============================================================================
 
-/**
- * Extract course data from a CSV chunk
- * 
- * IMPORTANT: This now properly handles suffixes
- * - If looking for 2251L, it will try to find 2251L first
- * - If 2251L not found, it returns null (not 2251)
- */
 function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, requestedInstitution) {
   if (!chunkText || typeof chunkText !== 'string') return null;
 
@@ -284,24 +264,17 @@ function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, re
 
   if (!reqSubj || !reqNum.base) return null;
 
-  // First, try to find EXACT course number (with suffix)
   let canonicalPattern;
   let canonicalMatch;
 
   if (reqNum.suffix) {
-    // Looking for course WITH suffix (e.g., 2251L)
     canonicalPattern = new RegExp(
       `([A-Z0-9 &\\-]+)::${reqSubj}::${reqNum.base}${reqNum.suffix}\\b`,
       'i'
     );
     canonicalMatch = chunkText.match(canonicalPattern);
-
-    if (canonicalMatch) {
-      console.log(`  Found exact course with suffix: ${reqSubj} ${reqNum.full}`);
-    }
   }
 
-  // If no suffix requested OR suffix version not found, try base number
   if (!canonicalMatch) {
     canonicalPattern = new RegExp(
       `([A-Z0-9 &\\-]+)::${reqSubj}::${reqNum.base}([A-Za-z]?)\\b`,
@@ -318,23 +291,19 @@ function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, re
   const foundSuffix = canonicalMatch[2] || '';
   const foundFullNumber = reqNum.base + foundSuffix;
 
-  // Validate institution
   if (requestedInstitution) {
     const { matches } = checkInstitutionMatch(requestedInstitution, foundInstitution);
     if (!matches) {
-      console.log(`  Institution mismatch: requested "${requestedInstitution}", found "${foundInstitution}"`);
       return null;
     }
   }
 
-  // Extract description from course section
   const keyPos = canonicalMatch.index;
   const afterKey = chunkText.slice(keyPos);
   const nextCourseMatch = afterKey.slice(50).match(/\n[A-Z0-9 &\-]+::[A-Z]{2,6}::\d/);
   const sectionEnd = nextCourseMatch ? 50 + nextCourseMatch.index : afterKey.length;
   const courseSection = afterKey.slice(0, sectionEnd);
 
-  // Extract title and description
   const dataPattern = new RegExp(
     `${reqSubj}[,\\s]+${reqNum.base}${foundSuffix}?[,\\s]+([^,]+)[,\\s]+"([^"]{20,})"`,
     'i'
@@ -361,14 +330,13 @@ function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, re
   return {
     institution: foundInstitution,
     subject: reqSubj,
-    number: foundFullNumber,           // The number we actually found
+    number: foundFullNumber,
     numberBase: reqNum.base,
-    suffix: foundSuffix,               // The suffix we actually found
-    requestedSuffix: reqNum.suffix,    // The suffix that was requested
+    suffix: foundSuffix,
+    requestedSuffix: reqNum.suffix,
     title,
     description,
     asuMatches,
-    // Flag if we found a different variant
     isVariant: reqNum.suffix !== foundSuffix
   };
 }
@@ -405,6 +373,89 @@ function extractAsuMatchesFromSection(courseSection) {
   }
 
   return matches;
+}
+
+/**
+ * Filter ASU matches to only include those with valid descriptions
+ * This is instant (no latency) since it's just array filtering
+ */
+function filterValidAsuMatches(matches) {
+  if (!matches || matches.length === 0) return [];
+
+  const filtered = matches.filter((match, idx) => {
+    const hasValidDescription = match.description &&
+      match.description.length >= 30 &&
+      !match.description.toLowerCase().includes('cannot find');
+
+    if (!hasValidDescription) {
+      console.log(`  ❌ Filtered out match ${idx + 1}: ${match.subject} ${match.number} (desc length: ${match.description?.length || 0})`);
+    } else {
+      console.log(`  ✅ Keeping match ${idx + 1}: ${match.subject} ${match.number} (desc length: ${match.description.length})`);
+    }
+
+    return hasValidDescription;
+  });
+
+  return filtered;
+}
+
+/**
+ * Search across multiple RAG candidates for related course variants
+ * and collect ALL unique ASU matches
+ */
+function collectAllAsuMatches(ragCandidates, institution, subject, numberBase) {
+  const allMatches = [];
+  const seen = new Set();
+
+  // Search through all candidates for variants of this course (with/without suffix)
+  for (const candidate of ragCandidates.slice(0, 5)) { // Check top 5 candidates
+    const text = candidate.text;
+
+    // Look for any course with same subject and number base
+    const variantPattern = new RegExp(
+      `${institution.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}::(${subject})::${numberBase}([A-Za-z]?)`,
+      'gi'
+    );
+
+    let match;
+    while ((match = variantPattern.exec(text)) !== null) {
+      const foundSubj = match[1].toUpperCase();
+      const foundSuffix = match[2] || '';
+      const fullNumber = numberBase + foundSuffix;
+      const key = `${foundSubj}::${fullNumber}`;
+
+      // Extract ASU matches from this section
+      const sectionStart = match.index;
+      const afterMatch = text.slice(sectionStart);
+      const nextCourseIdx = afterMatch.slice(100).search(/\n[A-Z0-9 &\-]+::[A-Z]{2,6}::\d/);
+      const sectionEnd = nextCourseIdx > 0 ? 100 + nextCourseIdx : Math.min(afterMatch.length, 2000);
+      const section = afterMatch.slice(0, sectionEnd);
+
+      const asuMatches = extractAsuMatchesFromSection(section);
+      for (const asuMatch of asuMatches) {
+        const asuKey = `${asuMatch.subject}::${asuMatch.number}`;
+
+        // CRITICAL: Only include matches that have valid descriptions
+        // This prevents showing "3 of 3" when only 1 has a description
+        const hasValidDescription = asuMatch.description &&
+          asuMatch.description.length >= 30 &&
+          !asuMatch.description.toLowerCase().includes('cannot find');
+
+        if (!seen.has(asuKey)) {
+          if (hasValidDescription) {
+            console.log(`  ✅ CollectAll: Keeping ${asuMatch.subject} ${asuMatch.number} (desc: ${asuMatch.description.length} chars)`);
+            seen.add(asuKey);
+            allMatches.push(asuMatch);
+            if (allMatches.length >= 10) return allMatches; // Cap at 10 matches
+          } else {
+            console.log(`  ❌ CollectAll: Filtered ${asuMatch.subject} ${asuMatch.number} (desc: ${asuMatch.description?.length || 0} chars)`);
+          }
+        }
+      }
+    }
+  }
+
+  return allMatches;
 }
 
 // ============================================================================
@@ -465,14 +516,14 @@ async function callRagSearch(token, query) {
   return candidates;
 }
 
-async function callLlmQuery(token, query, systemPromptWithContext) {
+async function callLlmQuery(token, query, systemPrompt) {
   const payload = {
-    model_provider: "openai",
-    model_name: "gpt5_2",
+    model_provider: "aws",
+    model_name: CONFIG.llmModel,
     model_params: {
       temperature: 0.0,
-      max_tokens: 1500,
-      system_prompt: systemPromptWithContext
+      max_tokens: CONFIG.llmMaxTokens,
+      system_prompt: systemPrompt
     },
     query: query,
     enable_search: false,
@@ -543,7 +594,7 @@ async function fetchCourseData(courseData) {
         return buildResponse({
           matchType: 'catalog_not_found',
           similarity: 0,
-          description: 'Cannot find the course description',
+          description: 'Catalog not indexed - institution not found in database',
           descriptionMissing: true,
           matches: [],
           elapsedMs: Date.now() - startTime,
@@ -560,26 +611,71 @@ async function fetchCourseData(courseData) {
 
     let extractedCourse = null;
     let extractionSource = null;
+    let allExtractedVariants = []; // Collect ALL matching course variants
 
     for (const candidate of ragCandidates) {
       const extracted = extractCourseFromChunk(
         candidate.text,
         subject,
-        number,  // Pass FULL number including suffix
+        number,
         institution
       );
 
       if (extracted && extracted.description && extracted.description.length >= CONFIG.minDescriptionLength) {
-        extractedCourse = extracted;
-        extractionSource = {
-          id: candidate.id,
-          score: candidate.score
-        };
-        break;
+        // Keep the first valid extraction as the primary match
+        if (!extractedCourse) {
+          extractedCourse = extracted;
+          extractionSource = {
+            id: candidate.id,
+            score: candidate.score
+          };
+        }
+
+        // But continue collecting variants from other chunks
+        allExtractedVariants.push(extracted);
       }
     }
 
     if (CONFIG.enableTimingLogs) console.timeEnd('Deterministic Extraction');
+
+    // ========================================
+    // STEP 3.5: Secondary catalog check if extraction failed
+    // ========================================
+    // If we couldn't extract ANY valid course, check if it's because
+    // the catalog isn't indexed at all (not just this specific course missing)
+    if (!extractedCourse) {
+      console.log('No valid course extracted - checking if catalog is indexed...');
+
+      // Check if we can find ANY course from this institution in the RAG results
+      let foundAnyInstitutionMatch = false;
+      for (const candidate of ragCandidates.slice(0, 5)) {
+        const instMatch = candidate.text.match(/([A-Z0-9 &\-]+)::[A-Z]{2,6}::\d/i);
+        if (instMatch) {
+          const foundInst = instMatch[1].trim();
+          const { matches } = checkInstitutionMatch(institution, foundInst);
+          if (matches) {
+            foundAnyInstitutionMatch = true;
+            console.log(`  Found institution match: ${foundInst}`);
+            break;
+          }
+        }
+      }
+
+      if (!foundAnyInstitutionMatch) {
+        console.log('⚡ FAST PATH: Catalog not found (no institution matches in extraction)');
+
+        return buildResponse({
+          matchType: 'catalog_not_found',
+          similarity: 0,
+          description: 'Catalog not indexed - institution not found in database',
+          descriptionMissing: true,
+          matches: [],
+          elapsedMs: Date.now() - startTime,
+          path: 'fast_catalog_not_found_after_extraction',
+          reason: 'no_valid_extraction'
+        });
+      }
+    }
 
     // ========================================
     // STEP 4: Classify Match (with proper suffix handling)
@@ -592,12 +688,11 @@ async function fetchCourseData(courseData) {
     let matches = [];
 
     if (extractedCourse) {
-      // Use the new classification that properly handles suffixes
       const classification = classifyMatch(
         subject,
-        reqNum.full,           // FULL requested number (e.g., "2251L")
+        reqNum.full,
         extractedCourse.subject,
-        extractedCourse.number // FULL found number (e.g., "2251")
+        extractedCourse.number
       );
 
       matchType = classification.matchType;
@@ -609,9 +704,26 @@ async function fetchCourseData(courseData) {
         title: extractedCourse.title
       };
 
-      matches = extractedCourse.asuMatches || [];
+      // For exact matches, collect ASU matches from ALL related course variants
+      if (matchType === 'exact') {
+        const comprehensiveMatches = collectAllAsuMatches(
+          ragCandidates,
+          institution,
+          subject,
+          reqNum.base
+        );
+        // Filter is already applied inside collectAllAsuMatches
+        const fallbackMatches = filterValidAsuMatches(extractedCourse.asuMatches || []);
+        matches = comprehensiveMatches.length > 0 ? comprehensiveMatches : fallbackMatches;
 
-      // Only populate description for EXACT matches
+        console.log(`ASU match collection: comprehensive=${comprehensiveMatches.length}, fallback=${fallbackMatches.length}, final=${matches.length}`);
+      } else {
+        // For fuzzy/no_match, filter the single-course extraction results
+        const unfiltered = extractedCourse.asuMatches || [];
+        matches = filterValidAsuMatches(unfiltered);
+        console.log(`ASU match filtering: unfiltered=${unfiltered.length}, filtered=${matches.length}`);
+      }
+
       if (matchType === 'exact' && extractedCourse.description) {
         description = extractedCourse.description;
         descriptionMissing = false;
@@ -621,7 +733,6 @@ async function fetchCourseData(courseData) {
       console.log(`  Requested: ${subject} ${reqNum.full}`);
       console.log(`  Found: ${extractedCourse.subject} ${extractedCourse.number}`);
       console.log(`  Match type: ${matchType} (similarity: ${similarity.toFixed(2)})`);
-      console.log(`  Is variant: ${extractedCourse.isVariant}`);
       console.log(`  Description length: ${extractedCourse.description?.length || 0}`);
       console.log(`  ASU matches: ${matches.length}`);
     }
@@ -629,7 +740,6 @@ async function fetchCourseData(courseData) {
     // ========================================
     // STEP 5: Decide if LLM is needed
     // ========================================
-    // Only skip LLM for TRUE exact matches (same subject AND same full number)
     const canSkipLlm = CONFIG.skipLlmWhenExactMatch &&
       matchType === 'exact' &&
       !descriptionMissing &&
@@ -653,16 +763,37 @@ async function fetchCourseData(courseData) {
     }
 
     // ========================================
+    // CRITICAL FIX: If description is missing, return no_match immediately
+    // Course equivalency cannot be validated without a description to compare
+    // ========================================
+    if (descriptionMissing || !description || description === 'Cannot find the course description') {
+      console.log('⚡ FAST PATH: Description missing - returning no_match without LLM call');
+      console.log(`  Attempted match type was: ${matchType}`);
+
+      return buildResponse({
+        matchType: 'no_match',
+        similarity: 0,
+        reflectedCourse: { subject: '', number: '', title: '' },
+        description: 'Course description not found in indexed catalog',
+        descriptionMissing: true,
+        matches: [],
+        elapsedMs: Date.now() - startTime,
+        path: 'fast_no_description'
+      });
+    }
+
+    // ========================================
     // STEP 6: Call LLM for fuzzy/no_match cases
     // ========================================
     console.log('⚠️ SLOW PATH: Calling LLM for validation/matching');
     console.log(`  Reason: matchType=${matchType}, descriptionMissing=${descriptionMissing}`);
 
-    const ragContext = ragCandidates.slice(0, 3)
-      .map(c => c.text.slice(0, 1500))
-      .join('\n\n---NEXT CHUNK---\n\n');
+    // Build COMPACT context for faster LLM processing
+    const ragContext = ragCandidates.slice(0, 2)
+      .map(c => c.text.slice(0, CONFIG.llmMaxContextChars / 2))
+      .join('\n---\n');
 
-    const systemPrompt = buildLlmSystemPrompt(ragContext, extractedCourse, subject, reqNum.full);
+    const systemPrompt = buildLlmSystemPrompt(ragContext, extractedCourse, subject, reqNum.full, institution);
 
     try {
       const llmResponse = await callLlmQuery(token, query, systemPrompt);
@@ -671,18 +802,29 @@ async function fetchCourseData(courseData) {
       responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
       const parsed = JSON.parse(responseText);
 
-      const llmSubject = parsed.subject || '';
-      const llmNumber = parsed.number || '';
+      const llmSubject = (parsed.subject || '').toUpperCase().trim();
+      const llmNumber = (parsed.number || '').toString().trim();
       const llmTitle = parsed.title || '';
       const llmDescription = parsed.input_course_description || '';
       const catalogStatus = parsed.catalog_status || '';
 
+      // ========================================
+      // CRITICAL FIX: Validate LLM response against request
+      // ========================================
+      // The LLM sometimes returns a DIFFERENT course than requested
+      // We must validate that the returned course matches what was asked
+
+      const llmClassification = classifyMatch(subject, reqNum.full, llmSubject, llmNumber);
+
+      console.log(`LLM returned: ${llmSubject} ${llmNumber}`);
+      console.log(`LLM classification: ${llmClassification.matchType} (similarity: ${llmClassification.similarity.toFixed(2)})`);
+
       if (catalogStatus === 'not_indexed' || catalogStatus === 'not_found') {
         matchType = 'catalog_not_found';
         similarity = 0;
+        reflectedCourse = { subject: '', number: '', title: '' };
       } else if (llmSubject && llmNumber) {
-        // Classify using full numbers
-        const llmClassification = classifyMatch(subject, reqNum.full, llmSubject, llmNumber);
+        // USE THE CLASSIFICATION - don't just trust LLM saying it's "exact"
         matchType = llmClassification.matchType;
         similarity = llmClassification.similarity;
 
@@ -691,6 +833,16 @@ async function fetchCourseData(courseData) {
           number: llmNumber,
           title: llmTitle
         };
+      } else {
+        // LLM didn't return subject/number - fallback to deterministic
+        if (extractedCourse) {
+          matchType = classifyMatch(subject, reqNum.full, extractedCourse.subject, extractedCourse.number).matchType;
+          reflectedCourse = {
+            subject: extractedCourse.subject,
+            number: extractedCourse.number,
+            title: extractedCourse.title
+          };
+        }
       }
 
       // Handle description
@@ -699,14 +851,18 @@ async function fetchCourseData(courseData) {
         llmDescription.length >= 30 &&
         !llmDescLower.includes('cannot find');
 
-      // For exact match, use description; for fuzzy, also show related description
-      if (matchType === 'exact' || matchType === 'fuzzy' || matchType === 'strong_fuzzy') {
+      // Only use description if it's an exact or fuzzy match
+      if (matchType === 'exact' && llmHasValidDesc) {
+        description = llmDescription;
+        descriptionMissing = false;
+      } else if ((matchType === 'fuzzy' || matchType === 'strong_fuzzy')) {
+        // For fuzzy matches, show description but mark as missing since it's not for the exact course
         if (llmHasValidDesc) {
           description = llmDescription;
-          descriptionMissing = false;
+          descriptionMissing = true; // Still mark as missing since it's fuzzy
         } else if (extractedCourse?.description) {
           description = extractedCourse.description;
-          descriptionMissing = false;
+          descriptionMissing = true;
         }
       }
 
@@ -725,11 +881,10 @@ async function fetchCourseData(courseData) {
         });
       }
 
-      // Prefer LLM matches if available
       if (llmMatches.length > 0) {
-        matches = llmMatches;
+        matches = filterValidAsuMatches(llmMatches);
       } else if (extractedCourse?.asuMatches?.length > 0) {
-        matches = extractedCourse.asuMatches;
+        matches = filterValidAsuMatches(extractedCourse.asuMatches);
       }
 
       return buildResponse({
@@ -737,7 +892,7 @@ async function fetchCourseData(courseData) {
         similarity,
         reflectedCourse,
         description,
-        descriptionMissing: !description || description.toLowerCase().includes('cannot find'),
+        descriptionMissing,
         matches,
         elapsedMs: Date.now() - startTime,
         path: 'llm_validated'
@@ -764,38 +919,20 @@ async function fetchCourseData(courseData) {
   }
 }
 
-function buildLlmSystemPrompt(ragContext, extractedCourse, requestedSubject, requestedNumber) {
-  let contextNote = '';
-  if (extractedCourse) {
-    contextNote = `
-NOTE: Deterministic extraction found a RELATED course:
-- Found: ${extractedCourse.subject} ${extractedCourse.number}
-- Requested: ${requestedSubject} ${requestedNumber}
-- This may be the lecture version of a lab course, or vice versa.
-- If the exact course (${requestedSubject} ${requestedNumber}) is not in the data, return catalog_status: "found" but set subject/number to what was actually found.
-`;
-  }
+function buildLlmSystemPrompt(ragContext, extractedCourse, requestedSubject, requestedNumber, requestedInstitution) {
+  // OPTIMIZED: Shorter, more focused prompt for faster processing
+  return `Course catalog assistant. Find: ${requestedSubject} ${requestedNumber} at ${requestedInstitution}
 
-  return `You are a course catalog validation assistant.
-
-TASK: Analyze the RAG search results for: ${requestedSubject} ${requestedNumber}
-
-IMPORTANT: Pay attention to course number SUFFIXES!
-- "2251L" (with L) is a LAB course
-- "2251" (without L) is a LECTURE course  
-- These are DIFFERENT courses - do not confuse them!
-
-RAG SEARCH RESULTS:
+DATA:
 ${ragContext}
-${contextNote}
 
 RULES:
-1. Do NOT hallucinate courses or descriptions
-2. If looking for "2251L" but only "2251" exists, report what was found (2251)
-3. Extract the EXACT description from the data
-4. Always return exactly 3 ASU matches (empty objects if not found)
+1. Find EXACT course ${requestedSubject} ${requestedNumber} - NOT a different course
+2. "132" and "132L" are DIFFERENT courses
+3. Return what you FOUND, not what was requested
+4. If course not in data, set subject/number to empty
 
-Return ONLY this JSON:
+JSON only:
 {
   "catalog_status": "found" | "not_indexed",
   "subject": "",
@@ -842,7 +979,15 @@ function buildResponse(params) {
     }
   };
 
-  console.log(`Result: ${matchType} (similarity: ${similarity?.toFixed(2) || 0})`);
+  // Clear distinction in logging
+  if (matchType === 'catalog_not_found') {
+    console.log(`Result: ⚠️  CATALOG NOT INDEXED - Institution's catalog is not in the database`);
+  } else if (matchType === 'no_match') {
+    console.log(`Result: ❌ NO MATCH - Course exists in catalog but description not found`);
+  } else {
+    console.log(`Result: ${matchType} (similarity: ${similarity?.toFixed(2) || 0})`);
+  }
+
   console.log(`Description: ${descriptionMissing ? 'MISSING' : description?.slice(0, 50) + '...'}`);
   console.log(`ASU Matches: ${matches.length}`);
   console.log(`Total time: ${elapsedMs}ms | Path: ${path}`);
@@ -851,5 +996,5 @@ function buildResponse(params) {
   return response;
 }
 
-console.log('Triangulator extension (OPTIMIZED v3.2) loaded');
+console.log('Triangulator extension (OPTIMIZED v3.6) loaded');
 console.log('Config:', CONFIG);

@@ -659,7 +659,11 @@ function initializeMatchCarousel(section) {
   buttons.forEach((button) => {
     button.addEventListener('click', () => {
       cards[index].classList.remove('is-active');
-      index = (index + 1) % cards.length;
+      if (button.classList.contains('carousel-btn--prev')) {
+        index = (index - 1 + cards.length) % cards.length;
+      } else {
+        index = (index + 1) % cards.length;
+      }
       cards[index].classList.add('is-active');
       updateIndicator();
     });
@@ -678,8 +682,9 @@ function generateMatchesHTML(matches) {
       <span class="match-meta">ASU Match: ${match.subject} ${match.number}</span>
       <p>${match.description}</p>
       <div class="match-controls">
+        ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--prev" type="button" aria-label="Show previous match">←</button>' : ''}
         <span class="match-indicator">1 of ${matches.length}</span>
-        ${matches.length > 1 ? '<button class="carousel-btn" type="button" aria-label="Show next match">→</button>' : ''}
+        ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--next" type="button" aria-label="Show next match">→</button>' : ''}
       </div>
     </article>
   `).join('');
@@ -784,7 +789,11 @@ function initializePopupControls(popup) {
       buttons.forEach((button) => {
         button.addEventListener('click', () => {
           cards[index].classList.remove('is-active');
-          index = (index + 1) % cards.length;
+          if (button.classList.contains('carousel-btn--prev')) {
+            index = (index - 1 + cards.length) % cards.length;
+          } else {
+            index = (index + 1) % cards.length;
+          }
           cards[index].classList.add('is-active');
           updateIndicator();
         });

@@ -77,11 +77,11 @@ function showTriangulatorPopup(courseData, event) {
   popup.id = 'triangulator-popup';
   popup.className = 'triangulator-popup';
 
-  // Position the popup near the click
+  // Position the popup in top-right corner
   popup.style.position = 'fixed';
   popup.style.right = '0';
-  popup.style.top = '50%';
-  popup.style.transform = 'translateY(-50%)';
+  popup.style.top = '0';
+  popup.style.transform = 'none';
   popup.style.zIndex = '10000';
 
   // Show loading state immediately
@@ -352,29 +352,45 @@ function initializePopupControls(popup) {
     // Dragging variables
     let isDragging = false;
     let dragTimeout = null;
+    let startX = 0;
     let startY = 0;
+    let startLeft = 0;
     let startTop = 0;
 
     toggleBtn.addEventListener('mousedown', (e) => {
+      startX = e.clientX;
       startY = e.clientY;
       const rect = popup.getBoundingClientRect();
       startTop = rect.top;
+      startLeft = rect.left;
 
       dragTimeout = setTimeout(() => {
         isDragging = true;
         popup.style.transition = 'none';
+        // Switch from right positioning to left positioning for free movement
+        popup.style.right = 'auto';
+        popup.style.left = `${startLeft}px`;
         e.preventDefault();
       }, 150);
     });
 
     document.addEventListener('mousemove', (e) => {
       if (!isDragging) return;
+      const deltaX = e.clientX - startX;
       const deltaY = e.clientY - startY;
+      
+      const newLeft = startLeft + deltaX;
       const newTop = startTop + deltaY;
+      
+      const maxLeft = window.innerWidth - popup.offsetWidth;
       const maxTop = window.innerHeight - popup.offsetHeight;
-      const clampedTop = Math.max(48, Math.min(newTop, maxTop));
+      
+      const clampedLeft = Math.max(0, Math.min(newLeft, maxLeft));
+      const clampedTop = Math.max(0, Math.min(newTop, maxTop));
+      
+      popup.style.left = `${clampedLeft}px`;
       popup.style.top = `${clampedTop}px`;
-      popup.style.transform = 'translateY(0)';
+      popup.style.transform = 'none';
     });
 
     document.addEventListener('mouseup', (e) => {

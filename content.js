@@ -77,12 +77,12 @@ function showTriangulatorPopup(courseData, event) {
   popup.id = 'triangulator-popup';
   popup.className = 'triangulator-popup';
 
-  // Position the popup in top-right corner
+  // Position the popup in top-right corner using right positioning for smooth animations
   popup.style.position = 'fixed';
   popup.style.right = '0';
   popup.style.top = '0';
   popup.style.transform = 'none';
-  popup.style.zIndex = '10000';
+  popup.style.zIndex = '2147483647'; // Maximum z-index to stay on top
 
   // Show loading state immediately
   popup.innerHTML = generatePopupHTML(courseData, { loading: true });
@@ -195,7 +195,7 @@ function generatePopupHTML(courseData, response) {
             <span class="course-meta">${courseData.subject} ${courseData.number} • ${courseData.hours} credit hours</span>
           </h1>
 
-          ${!isLoading && !isError ? getStatusIndicatorHTML(matchType) : ''}
+          ${!isLoading && !isError && matchType !== 'exact' ? getStatusIndicatorHTML(matchType) : ''}
 
           ${!isLoading && !isError && isFuzzy && reflectedCourse && reflectedCourse.subject ? `
             <div class="reflected-header" style="margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--divider);">
@@ -224,6 +224,7 @@ function generatePopupHTML(courseData, response) {
 
         ${!isLoading && !isError && isMatch ? `
         <div id="matches-container">
+          ${matchType === 'exact' ? getStatusIndicatorHTML(matchType) : ''}
           ${isLoading ? '<section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>' : ''}
           ${isError ? `<section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>` : ''}
           ${hasMatches ? generateMatchesHTML(response.matches) : '<section class="matches"><p style="text-align: center; color: #666; padding: 20px; font-style: italic;">No equivalent courses found at ASU.</p></section>'}
@@ -391,6 +392,7 @@ function initializePopupControls(popup) {
       popup.style.left = `${clampedLeft}px`;
       popup.style.top = `${clampedTop}px`;
       popup.style.transform = 'none';
+      popup.classList.add('is-floating');
     });
 
     document.addEventListener('mouseup', (e) => {
@@ -398,6 +400,15 @@ function initializePopupControls(popup) {
       if (isDragging) {
         isDragging = false;
         popup.style.transition = '';
+        
+        // Check if docked to right edge after drag ends
+        const rect = popup.getBoundingClientRect();
+        const isAtRightEdge = (rect.right >= window.innerWidth - 10);
+        if (isAtRightEdge) {
+          popup.classList.remove('is-floating');
+          popup.style.left = 'auto';
+          popup.style.right = '0';
+        }
       } else if (e.target === toggleBtn || toggleBtn.contains(e.target)) {
         // ONLY toggle if the actual button was clicked
         const collapsed = overlay.classList.toggle('is-collapsed');

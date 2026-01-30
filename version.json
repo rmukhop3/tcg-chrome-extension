@@ -1,5 +1,5 @@
 {
-    "version": "1.0.3",
-    "last_updated": "2026-01-15",
-    "description": "Change system prompt and use nova-lite model, make the pipeline more efficient in making LLM calls"
+    "version": "1.0.5",
+    "last_updated": "2026-01-29",
+    "description": "Movable UI triangulator extension, Default position for the extension is updated to the top right corner, Added a back arrow for ASU matches, Update match text: Current text = Exact match → update to Suggested matches, Update text: match not found → Course not found"
 }

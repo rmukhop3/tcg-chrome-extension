@@ -1,5 +1,8 @@
 console.log('Triangulator extension loaded');
 
+// Store popup position for persistence across row clicks
+let savedPopupPosition = null;
+
 // Function to extract course data from HTML
 function extractCourseData(element) {
   // Look for the course data structure in the real TCG
@@ -77,12 +80,25 @@ function showTriangulatorPopup(courseData, event) {
   popup.id = 'triangulator-popup';
   popup.className = 'triangulator-popup';
 
-  // Position the popup in top-right corner using right positioning for smooth animations
+  // Position the popup - use saved position if available, otherwise top-right corner
   popup.style.position = 'fixed';
-  popup.style.right = '0';
-  popup.style.top = '0';
-  popup.style.transform = 'none';
   popup.style.zIndex = '2147483647'; // Maximum z-index to stay on top
+  
+  if (savedPopupPosition) {
+    // Restore saved position
+    popup.style.top = savedPopupPosition.top;
+    popup.style.left = savedPopupPosition.left;
+    popup.style.right = savedPopupPosition.right;
+    popup.style.transform = 'none';
+    if (savedPopupPosition.isFloating) {
+      popup.classList.add('is-floating');
+    }
+  } else {
+    // Default to top-right corner
+    popup.style.right = '0';
+    popup.style.top = '0';
+    popup.style.transform = 'none';
+  }
 
   // Show loading state immediately
   popup.innerHTML = generatePopupHTML(courseData, { loading: true });
@@ -346,76 +362,104 @@ function initializePopupControls(popup) {
     });
   }
 
-  // Toggle button
+  // Toggle button and drag handling
   const toggleBtn = popup.querySelector('.overlay__action');
+  const header = popup.querySelector('.popup-header');
 
+  // Dragging variables
+  let isDragging = false;
+  let dragTimeout = null;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+
+  // Function to save current position
+  const savePosition = () => {
+    savedPopupPosition = {
+      top: popup.style.top,
+      left: popup.style.left,
+      right: popup.style.right,
+      isFloating: popup.classList.contains('is-floating')
+    };
+  };
+
+  // Function to start drag
+  const startDrag = (e) => {
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = popup.getBoundingClientRect();
+    startTop = rect.top;
+    startLeft = rect.left;
+
+    dragTimeout = setTimeout(() => {
+      isDragging = true;
+      popup.style.transition = 'none';
+      // Switch from right positioning to left positioning for free movement
+      popup.style.right = 'auto';
+      popup.style.left = `${startLeft}px`;
+      e.preventDefault();
+    }, 150);
+  };
+
+  // Add drag handlers to toggle button
   if (toggleBtn) {
-    // Dragging variables
-    let isDragging = false;
-    let dragTimeout = null;
-    let startX = 0;
-    let startY = 0;
-    let startLeft = 0;
-    let startTop = 0;
+    toggleBtn.addEventListener('mousedown', startDrag);
+  }
 
-    toggleBtn.addEventListener('mousedown', (e) => {
-      startX = e.clientX;
-      startY = e.clientY;
-      const rect = popup.getBoundingClientRect();
-      startTop = rect.top;
-      startLeft = rect.left;
-
-      dragTimeout = setTimeout(() => {
-        isDragging = true;
-        popup.style.transition = 'none';
-        // Switch from right positioning to left positioning for free movement
-        popup.style.right = 'auto';
-        popup.style.left = `${startLeft}px`;
-        e.preventDefault();
-      }, 150);
-    });
-
-    document.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      const deltaX = e.clientX - startX;
-      const deltaY = e.clientY - startY;
-      
-      const newLeft = startLeft + deltaX;
-      const newTop = startTop + deltaY;
-      
-      const maxLeft = window.innerWidth - popup.offsetWidth;
-      const maxTop = window.innerHeight - popup.offsetHeight;
-      
-      const clampedLeft = Math.max(0, Math.min(newLeft, maxLeft));
-      const clampedTop = Math.max(0, Math.min(newTop, maxTop));
-      
-      popup.style.left = `${clampedLeft}px`;
-      popup.style.top = `${clampedTop}px`;
-      popup.style.transform = 'none';
-      popup.classList.add('is-floating');
-    });
-
-    document.addEventListener('mouseup', (e) => {
-      clearTimeout(dragTimeout);
-      if (isDragging) {
-        isDragging = false;
-        popup.style.transition = '';
-        
-        // Check if docked to right edge after drag ends
-        const rect = popup.getBoundingClientRect();
-        const isAtRightEdge = (rect.right >= window.innerWidth - 10);
-        if (isAtRightEdge) {
-          popup.classList.remove('is-floating');
-          popup.style.left = 'auto';
-          popup.style.right = '0';
-        }
-      } else if (e.target === toggleBtn || toggleBtn.contains(e.target)) {
-        // ONLY toggle if the actual button was clicked
-        const collapsed = overlay.classList.toggle('is-collapsed');
-        toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-      }
+  // Add drag handlers to header (for dragging when expanded)
+  if (header) {
+    header.style.cursor = 'move';
+    header.addEventListener('mousedown', (e) => {
+      // Don't start drag if clicking on interactive elements
+      if (e.target.closest('a, button, .overlay__action')) return;
+      startDrag(e);
     });
   }
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+    
+    const newLeft = startLeft + deltaX;
+    const newTop = startTop + deltaY;
+    
+    const maxLeft = window.innerWidth - popup.offsetWidth;
+    const maxTop = window.innerHeight - popup.offsetHeight;
+    
+    const clampedLeft = Math.max(0, Math.min(newLeft, maxLeft));
+    const clampedTop = Math.max(0, Math.min(newTop, maxTop));
+    
+    popup.style.left = `${clampedLeft}px`;
+    popup.style.top = `${clampedTop}px`;
+    popup.style.transform = 'none';
+    popup.classList.add('is-floating');
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    clearTimeout(dragTimeout);
+    if (isDragging) {
+      isDragging = false;
+      popup.style.transition = '';
+      
+      // Check if docked to right edge after drag ends
+      const rect = popup.getBoundingClientRect();
+      const isAtRightEdge = (rect.right >= window.innerWidth - 10);
+      if (isAtRightEdge) {
+        popup.classList.remove('is-floating');
+        popup.style.left = 'auto';
+        popup.style.right = '0';
+      }
+      
+      // Save position after drag ends
+      savePosition();
+    } else if (toggleBtn && (e.target === toggleBtn || toggleBtn.contains(e.target))) {
+      // ONLY toggle if the actual button was clicked
+      const collapsed = overlay.classList.toggle('is-collapsed');
+      toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    }
+  });
 
   // Carousel controls
   const matchesSection = popup.querySelector('.matches');

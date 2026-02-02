@@ -364,7 +364,6 @@ function initializePopupControls(popup) {
 
   // Toggle button and drag handling
   const toggleBtn = popup.querySelector('.overlay__action');
-  const header = popup.querySelector('.popup-header');
 
   // Dragging variables
   let isDragging = false;
@@ -402,20 +401,13 @@ function initializePopupControls(popup) {
     }, 150);
   };
 
-  // Add drag handlers to toggle button
-  if (toggleBtn) {
-    toggleBtn.addEventListener('mousedown', startDrag);
-  }
-
-  // Add drag handlers to header (for dragging when expanded)
-  if (header) {
-    header.style.cursor = 'move';
-    header.addEventListener('mousedown', (e) => {
-      // Don't start drag if clicking on interactive elements
-      if (e.target.closest('a, button, .overlay__action')) return;
-      startDrag(e);
-    });
-  }
+  // Add drag handlers to entire popup (works in both minimized and maximized state)
+  popup.style.cursor = 'move';
+  popup.addEventListener('mousedown', (e) => {
+    // Don't start drag if clicking on interactive elements like links, buttons, inputs
+    if (e.target.closest('a, button, input, select, textarea')) return;
+    startDrag(e);
+  });
 
   document.addEventListener('mousemove', (e) => {
     if (!isDragging) return;

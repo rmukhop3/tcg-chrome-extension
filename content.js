@@ -309,12 +309,17 @@ function initializeMatchCarousel(section) {
 function generateMatchesHTML(matches) {
   if (!matches || matches.length === 0) return '';
 
-  const matchCards = matches.map((match, index) => `
+  const matchCards = matches.map((match, index) => {
+    // Only show credit hours if available and valid (> 0)
+    const hours = match.hours && Number(match.hours) > 0 ? Number(match.hours) : null;
+    const creditHoursText = hours ? ` • ${hours} credit hour${hours !== 1 ? 's' : ''}` : '';
+    
+    return `
     <article class="match-card ${index === 0 ? 'is-active' : ''}" data-index="${index}">
       <div class="match-heading">
         <h3>${match.title}</h3>
       </div>
-      <span class="match-meta">ASU Match: ${match.subject} ${match.number}</span>
+      <span class="match-meta">ASU ${match.subject} ${match.number}${creditHoursText}</span>
       <p>${match.description}</p>
       <div class="match-controls">
         ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--prev" type="button" aria-label="Show previous match">←</button>' : ''}
@@ -322,7 +327,7 @@ function generateMatchesHTML(matches) {
         ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--next" type="button" aria-label="Show next match">→</button>' : ''}
       </div>
     </article>
-  `).join('');
+  `}).join('');
 
   return `
     <section class="matches" aria-label="Equivalent courses at ASU">

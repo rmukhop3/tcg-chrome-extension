@@ -359,17 +359,46 @@ function extractAsuMatchesFromSection(courseSection) {
       seen.add(key);
 
       const afterMatch = courseSection.slice(m.index);
-      const detailPattern = new RegExp(
+      
+      // Try to extract title, credits, and description
+      // Pattern: SUBJ, NUM, Title, Credits (or just number), "Description"
+      // Credits may appear as "3" or "3.0" or "3 credits" etc.
+      const detailPatternWithCredits = new RegExp(
+        `${subj}[,\\s]+${num}[^,]*[,\\s]+([^,]+)[,\\s]+(\\d+(?:\\.\\d+)?)[,\\s]+"([^"]+)"`,
+        'i'
+      );
+      const detailPatternSimple = new RegExp(
         `${subj}[,\\s]+${num}[^,]*[,\\s]+([^,]+)[,\\s]+"([^"]+)"`,
         'i'
       );
-      const details = afterMatch.match(detailPattern);
+      
+      let title = '';
+      let description = '';
+      let credits = null;
+      
+      const detailsWithCredits = afterMatch.match(detailPatternWithCredits);
+      if (detailsWithCredits) {
+        title = detailsWithCredits[1].trim();
+        credits = parseFloat(detailsWithCredits[2]);
+        description = detailsWithCredits[3].trim();
+        // Validate credits - must be positive and reasonable (typically 1-12)
+        if (credits <= 0 || credits > 12) {
+          credits = null;
+        }
+      } else {
+        const details = afterMatch.match(detailPatternSimple);
+        if (details) {
+          title = details[1].trim();
+          description = details[2].trim();
+        }
+      }
 
       matches.push({
         subject: subj,
         number: num,
-        title: details ? details[1].trim() : '',
-        description: details ? details[2].trim() : ''
+        title: title,
+        description: description,
+        hours: credits
       });
     }
   }

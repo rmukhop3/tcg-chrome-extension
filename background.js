@@ -15,12 +15,54 @@ const API_CONFIG = {
   queryUrl: 'https://api-main-poc.aiml.asu.edu/query'
 };
 
+// ============================================================================
+// LOGGING CONFIGURATION
+// ============================================================================
+// LOG_LEVEL options:
+//   "INFO"  - Only important messages (results, errors, fast path decisions)
+//   "DEBUG" - Detailed debugging info (extraction details, match filtering)
+//   "LOCAL" - Full verbose logging including raw chunks (for local development)
+const LOG_LEVEL = "INFO";
+
+const LOG_LEVELS = {
+  INFO: 1,
+  DEBUG: 2,
+  LOCAL: 3
+};
+
+const log = {
+  info: (...args) => {
+    if (LOG_LEVELS[LOG_LEVEL] >= LOG_LEVELS.INFO) {
+      console.log(...args);
+    }
+  },
+  debug: (...args) => {
+    if (LOG_LEVELS[LOG_LEVEL] >= LOG_LEVELS.DEBUG) {
+      console.log(...args);
+    }
+  },
+  local: (...args) => {
+    if (LOG_LEVELS[LOG_LEVEL] >= LOG_LEVELS.LOCAL) {
+      console.log(...args);
+    }
+  },
+  time: (label) => {
+    if (LOG_LEVELS[LOG_LEVEL] >= LOG_LEVELS.DEBUG) {
+      console.time(label);
+    }
+  },
+  timeEnd: (label) => {
+    if (LOG_LEVELS[LOG_LEVEL] >= LOG_LEVELS.DEBUG) {
+      console.timeEnd(label);
+    }
+  }
+};
+
 const CONFIG = {
   skipLlmWhenExactMatch: true,
   skipLlmWhenCatalogNotFound: true,
   minRagScoreForTrust: 8.0,
   minDescriptionLength: 50,
-  enableTimingLogs: true,
 
   catalogNotFoundThresholds: {
     maxTopScore: 12.0,
@@ -220,7 +262,7 @@ function detectCatalogNotFound(ragCandidates, requestedInstitution, requestedSub
   const thresholds = CONFIG.catalogNotFoundThresholds;
 
   if (topScore < thresholds.maxTopScore) {
-    console.log(`Low RAG scores (top: ${topScore.toFixed(2)}) - checking institution match...`);
+    log.debug(`Low RAG scores (top: ${topScore.toFixed(2)}) - checking institution match...`);
 
     let foundInstitutionMatch = false;
     let bestInstitutionRatio = 0;
@@ -393,30 +435,30 @@ function extractAsuMatchesFromSection(courseSection) {
         const creditMin = parseFloat(csvDetails[4]);
         const creditMax = parseFloat(csvDetails[5]);
         
-        console.log(`  📊 Credit hours for ${subj} ${num}: min=${creditMin}, max=${creditMax}`);
+        log.debug(`  📊 Credit hours for ${subj} ${num}: min=${creditMin}, max=${creditMax}`);
         
         // Format credit hours: single value if same, range if different
         if (!isNaN(creditMin) && !isNaN(creditMax) && creditMin > 0) {
           if (creditMin === creditMax) {
             hours = creditMin;
-            console.log(`    → Single value: ${hours} credit hour(s)`);
+            log.debug(`    → Single value: ${hours} credit hour(s)`);
           } else {
             hours = `${creditMin} - ${creditMax}`;
-            console.log(`    → Range: ${hours} credit hours`);
+            log.debug(`    → Range: ${hours} credit hours`);
           }
         } else {
-          console.log(`    → Invalid credit values, skipping`);
+          log.debug(`    → Invalid credit values, skipping`);
         }
       } else if (simpleDetails) {
         title = simpleDetails[1].trim();
         description = simpleDetails[2].trim();
-        console.log(`  📊 No CSV pattern match for ${subj} ${num}, using simple pattern (no credit hours)`);
+        log.debug(`  📊 No CSV pattern match for ${subj} ${num}, using simple pattern (no credit hours)`);
       } else if (truncatedDetails) {
         title = truncatedDetails[1].trim();
         description = truncatedDetails[2].trim();
-        console.log(`  📊 Truncated data for ${subj} ${num}, extracted partial description (no credit hours)`);
+        log.debug(`  📊 Truncated data for ${subj} ${num}, extracted partial description (no credit hours)`);
       } else {
-        console.log(`  📊 No details found for ${subj} ${num}`);
+        log.debug(`  📊 No details found for ${subj} ${num}`);
       }
 
       matches.push({
@@ -447,20 +489,20 @@ function filterValidAsuMatches(matches, ragCandidates = null) {
     const needsCompleteData = !hasValidDescription || (hasValidDescription && match.hours === null);
     
     if (needsCompleteData && ragCandidates) {
-      console.log(`  🔍 Searching other chunks for complete data: ${match.subject} ${match.number} (reason: ${!hasValidDescription ? 'invalid description' : 'missing credit hours'})`);
+      log.debug(`  🔍 Searching other chunks for complete data: ${match.subject} ${match.number} (reason: ${!hasValidDescription ? 'invalid description' : 'missing credit hours'})`);
       const completeData = findCompleteAsuMatchData(ragCandidates, match.subject, match.number);
       if (completeData && isValidAsuDescription(completeData.description)) {
-        console.log(`  ✅ Found complete data in another chunk for ${match.subject} ${match.number} (hours: ${completeData.hours})`);
+        log.debug(`  ✅ Found complete data in another chunk for ${match.subject} ${match.number} (hours: ${completeData.hours})`);
         finalMatch = completeData;
         hasValidDescription = true;
       }
     }
 
     if (!hasValidDescription) {
-      console.log(`  ❌ Filtered out match ${idx + 1}: ${finalMatch.subject} ${finalMatch.number} (desc length: ${finalMatch.description?.length || 0})`);
+      log.debug(`  ❌ Filtered out match ${idx + 1}: ${finalMatch.subject} ${finalMatch.number} (desc length: ${finalMatch.description?.length || 0})`);
       return null;
     } else {
-      console.log(`  ✅ Keeping match ${idx + 1}: ${finalMatch.subject} ${finalMatch.number} (desc length: ${finalMatch.description.length}, hours: ${finalMatch.hours})`);
+      log.debug(`  ✅ Keeping match ${idx + 1}: ${finalMatch.subject} ${finalMatch.number} (desc length: ${finalMatch.description.length}, hours: ${finalMatch.hours})`);
       return finalMatch;
     }
   }).filter(m => m !== null);
@@ -557,12 +599,12 @@ function collectAllAsuMatches(ragCandidates, institution, subject, numberBase) {
 
         if (!seen.has(asuKey)) {
           if (hasValidDescription) {
-            console.log(`  ✅ CollectAll: Keeping ${asuMatch.subject} ${asuMatch.number} (desc: ${asuMatch.description.length} chars)`);
+            log.debug(`  ✅ CollectAll: Keeping ${asuMatch.subject} ${asuMatch.number} (desc: ${asuMatch.description.length} chars)`);
             seen.add(asuKey);
             allMatches.push(asuMatch);
             if (allMatches.length >= 10) return allMatches; // Cap at 10 matches
           } else {
-            console.log(`  ❌ CollectAll: Filtered ${asuMatch.subject} ${asuMatch.number} (desc: ${asuMatch.description?.length || 0} chars)`);
+            log.debug(`  ❌ CollectAll: Filtered ${asuMatch.subject} ${asuMatch.number} (desc: ${asuMatch.description?.length || 0} chars)`);
           }
         }
       }
@@ -588,7 +630,7 @@ async function callRagSearch(token, query) {
     }
   };
 
-  if (CONFIG.enableTimingLogs) console.time('RAG /search');
+  log.time('RAG /search');
 
   const response = await fetch(API_CONFIG.searchUrl, {
     method: 'POST',
@@ -599,7 +641,7 @@ async function callRagSearch(token, query) {
     body: JSON.stringify(payload)
   });
 
-  if (CONFIG.enableTimingLogs) console.timeEnd('RAG /search');
+  log.timeEnd('RAG /search');
 
   if (!response.ok) {
     throw new Error(`RAG search failed: HTTP ${response.status}`);
@@ -624,18 +666,18 @@ async function callRagSearch(token, query) {
 
   candidates.sort((a, b) => b.score - a.score);
 
-  console.log(`RAG returned ${candidates.length} results, top scores:`,
+  log.debug(`RAG returned ${candidates.length} results, top scores:`,
     candidates.slice(0, 3).map(c => c.score.toFixed(2)));
 
-  // Debug: Log the raw chunks from /search endpoint
-  console.log('='.repeat(60));
-  console.log('🔍 RAG /search CHUNKS DEBUG:');
+  // Debug: Log the raw chunks from /search endpoint (LOCAL level only)
+  log.local('='.repeat(60));
+  log.local('🔍 RAG /search CHUNKS DEBUG:');
   candidates.forEach((chunk, idx) => {
-    console.log(`\n--- Chunk ${idx + 1} (score: ${chunk.score.toFixed(4)}) ---`);
-    console.log(`ID: ${chunk.id}`);
-    console.log(`Text:\n${chunk.text}`);
+    log.local(`\n--- Chunk ${idx + 1} (score: ${chunk.score.toFixed(4)}) ---`);
+    log.local(`ID: ${chunk.id}`);
+    log.local(`Text:\n${chunk.text}`);
   });
-  console.log('='.repeat(60));
+  log.local('='.repeat(60));
 
   return candidates;
 }
@@ -654,7 +696,7 @@ async function callLlmQuery(token, query, systemPrompt) {
     response_format: { type: "json" }
   };
 
-  if (CONFIG.enableTimingLogs) console.time('LLM /query');
+  log.time('LLM /query');
 
   const response = await fetch(API_CONFIG.queryUrl, {
     method: 'POST',
@@ -665,7 +707,7 @@ async function callLlmQuery(token, query, systemPrompt) {
     body: JSON.stringify(payload)
   });
 
-  if (CONFIG.enableTimingLogs) console.timeEnd('LLM /query');
+  log.timeEnd('LLM /query');
 
   if (!response.ok) {
     throw new Error(`LLM query failed: HTTP ${response.status}`);
@@ -697,9 +739,9 @@ async function fetchCourseData(courseData) {
     const reqNum = parseCourseNumber(number);
 
     const query = `${institution} ${subject} ${number} ${title}`.trim();
-    console.log('='.repeat(60));
-    console.log('Fetching course data for:', query);
-    console.log(`Requested: ${subject} ${reqNum.full} (base: ${reqNum.base}, suffix: "${reqNum.suffix}")`);
+    log.info('='.repeat(60));
+    log.info('Fetching course data for:', query);
+    log.debug(`Requested: ${subject} ${reqNum.full} (base: ${reqNum.base}, suffix: "${reqNum.suffix}")`);
 
     // ========================================
     // STEP 1: RAG Search
@@ -713,7 +755,7 @@ async function fetchCourseData(courseData) {
       const catalogCheck = detectCatalogNotFound(ragCandidates, institution, subject, reqNum.base);
 
       if (catalogCheck.notFound) {
-        console.log(`⚡ FAST PATH: Catalog not found (reason: ${catalogCheck.reason})`);
+        log.info(`⚡ FAST PATH: Catalog not found (reason: ${catalogCheck.reason})`);
 
         return buildResponse({
           matchType: 'catalog_not_found',
@@ -731,7 +773,7 @@ async function fetchCourseData(courseData) {
     // ========================================
     // STEP 3: Try Deterministic Extraction
     // ========================================
-    if (CONFIG.enableTimingLogs) console.time('Deterministic Extraction');
+    log.time('Deterministic Extraction');
 
     let extractedCourse = null;
     let extractionSource = null;
@@ -760,7 +802,7 @@ async function fetchCourseData(courseData) {
       }
     }
 
-    if (CONFIG.enableTimingLogs) console.timeEnd('Deterministic Extraction');
+    log.timeEnd('Deterministic Extraction');
 
     // ========================================
     // STEP 3.5: Secondary catalog check if extraction failed
@@ -768,7 +810,7 @@ async function fetchCourseData(courseData) {
     // If we couldn't extract ANY valid course, check if it's because
     // the catalog isn't indexed at all (not just this specific course missing)
     if (!extractedCourse) {
-      console.log('No valid course extracted - checking if catalog is indexed...');
+      log.debug('No valid course extracted - checking if catalog is indexed...');
 
       // Check if we can find ANY course from this institution in the RAG results
       // Check top 10 candidates (expanded from 5) to handle cases where institution
@@ -784,7 +826,7 @@ async function fetchCourseData(courseData) {
           const { matches } = checkInstitutionMatch(institution, foundInst);
           if (matches) {
             foundAnyInstitutionMatch = true;
-            console.log(`  Found institution match: ${foundInst} (in candidate ${checkedCandidates})`);
+            log.debug(`  Found institution match: ${foundInst} (in candidate ${checkedCandidates})`);
             break;
           }
         }
@@ -794,7 +836,7 @@ async function fetchCourseData(courseData) {
       // If we found the institution in RAG results (even deep in the list),
       // the catalog IS indexed. Missing course = no_match, not catalog_not_found
       if (!foundAnyInstitutionMatch) {
-        console.log(`⚡ FAST PATH: Catalog not found (no institution matches in top ${checkedCandidates} results)`);
+        log.info(`⚡ FAST PATH: Catalog not found (no institution matches in top ${checkedCandidates} results)`);
 
         return buildResponse({
           matchType: 'catalog_not_found',
@@ -810,7 +852,7 @@ async function fetchCourseData(courseData) {
 
       // If we found the institution but couldn't extract the course, continue to description check
       // This will return "no_match" for this specific course
-      console.log(`  Institution IS indexed, but this specific course description is missing`);
+      log.debug(`  Institution IS indexed, but this specific course description is missing`);
     }
 
     // ========================================
@@ -852,12 +894,12 @@ async function fetchCourseData(courseData) {
         const fallbackMatches = filterValidAsuMatches(extractedCourse.asuMatches || [], ragCandidates);
         matches = comprehensiveMatches.length > 0 ? comprehensiveMatches : fallbackMatches;
 
-        console.log(`ASU match collection: comprehensive=${comprehensiveMatches.length}, fallback=${fallbackMatches.length}, final=${matches.length}`);
+        log.debug(`ASU match collection: comprehensive=${comprehensiveMatches.length}, fallback=${fallbackMatches.length}, final=${matches.length}`);
       } else {
         // For fuzzy/no_match, filter the single-course extraction results
         const unfiltered = extractedCourse.asuMatches || [];
         matches = filterValidAsuMatches(unfiltered, ragCandidates);
-        console.log(`ASU match filtering: unfiltered=${unfiltered.length}, filtered=${matches.length}`);
+        log.debug(`ASU match filtering: unfiltered=${unfiltered.length}, filtered=${matches.length}`);
       }
 
       if (matchType === 'exact' && extractedCourse.description) {
@@ -865,12 +907,12 @@ async function fetchCourseData(courseData) {
         descriptionMissing = false;
       }
 
-      console.log(`Deterministic extraction result:`);
-      console.log(`  Requested: ${subject} ${reqNum.full}`);
-      console.log(`  Found: ${extractedCourse.subject} ${extractedCourse.number}`);
-      console.log(`  Match type: ${matchType} (similarity: ${similarity.toFixed(2)})`);
-      console.log(`  Description length: ${extractedCourse.description?.length || 0}`);
-      console.log(`  ASU matches: ${matches.length}`);
+      log.debug(`Deterministic extraction result:`);
+      log.debug(`  Requested: ${subject} ${reqNum.full}`);
+      log.debug(`  Found: ${extractedCourse.subject} ${extractedCourse.number}`);
+      log.debug(`  Match type: ${matchType} (similarity: ${similarity.toFixed(2)})`);
+      log.debug(`  Description length: ${extractedCourse.description?.length || 0}`);
+      log.debug(`  ASU matches: ${matches.length}`);
     }
 
     // ========================================
@@ -882,7 +924,7 @@ async function fetchCourseData(courseData) {
       extractionSource?.score >= CONFIG.minRagScoreForTrust;
 
     if (canSkipLlm) {
-      console.log('✅ FAST PATH: Exact match found, skipping LLM');
+      log.info('✅ FAST PATH: Exact match found, skipping LLM');
 
       return buildResponse({
         matchType,
@@ -903,8 +945,8 @@ async function fetchCourseData(courseData) {
     // Course equivalency cannot be validated without a description to compare
     // ========================================
     if (descriptionMissing || !description || description === 'Cannot find the course description') {
-      console.log('⚡ FAST PATH: Description missing - returning no_match without LLM call');
-      console.log(`  Attempted match type was: ${matchType}`);
+      log.info('⚡ FAST PATH: Description missing - returning no_match without LLM call');
+      log.debug(`  Attempted match type was: ${matchType}`);
 
       return buildResponse({
         matchType: 'no_match',
@@ -921,8 +963,8 @@ async function fetchCourseData(courseData) {
     // ========================================
     // STEP 6: Call LLM for fuzzy/no_match cases
     // ========================================
-    console.log('⚠️ SLOW PATH: Calling LLM for validation/matching');
-    console.log(`  Reason: matchType=${matchType}, descriptionMissing=${descriptionMissing}`);
+    log.info('⚠️ SLOW PATH: Calling LLM for validation/matching');
+    log.debug(`  Reason: matchType=${matchType}, descriptionMissing=${descriptionMissing}`);
 
     // Build COMPACT context for faster LLM processing
     const ragContext = ragCandidates.slice(0, 2)
@@ -952,8 +994,8 @@ async function fetchCourseData(courseData) {
 
       const llmClassification = classifyMatch(subject, reqNum.full, llmSubject, llmNumber);
 
-      console.log(`LLM returned: ${llmSubject} ${llmNumber}`);
-      console.log(`LLM classification: ${llmClassification.matchType} (similarity: ${llmClassification.similarity.toFixed(2)})`);
+      log.debug(`LLM returned: ${llmSubject} ${llmNumber}`);
+      log.debug(`LLM classification: ${llmClassification.matchType} (similarity: ${llmClassification.similarity.toFixed(2)})`);
 
       if (catalogStatus === 'not_indexed' || catalogStatus === 'not_found') {
         matchType = 'catalog_not_found';
@@ -1122,20 +1164,21 @@ function buildResponse(params) {
 
   // Clear distinction in logging
   if (matchType === 'catalog_not_found') {
-    console.log(`Result: ⚠️  CATALOG NOT INDEXED - Institution's catalog is not in the database`);
+    log.info(`Result: ⚠️  CATALOG NOT INDEXED - Institution's catalog is not in the database`);
   } else if (matchType === 'no_match') {
-    console.log(`Result: ❌ NO MATCH - Course exists in catalog but description not found`);
+    log.info(`Result: ❌ NO MATCH - Course exists in catalog but description not found`);
   } else {
-    console.log(`Result: ${matchType} (similarity: ${similarity?.toFixed(2) || 0})`);
+    log.info(`Result: ${matchType} (similarity: ${similarity?.toFixed(2) || 0})`);
   }
 
-  console.log(`Description: ${descriptionMissing ? 'MISSING' : description?.slice(0, 50) + '...'}`);
-  console.log(`ASU Matches: ${matches.length}`);
-  console.log(`Total time: ${elapsedMs}ms | Path: ${path}`);
-  console.log('='.repeat(60));
+  log.info(`Description: ${descriptionMissing ? 'MISSING' : description?.slice(0, 50) + '...'}`);
+  log.info(`ASU Matches: ${matches.length}`);
+  log.info(`Total time: ${elapsedMs}ms | Path: ${path}`);
+  log.info('='.repeat(60));
 
   return response;
 }
 
-console.log('Triangulator extension (OPTIMIZED v3.10) loaded');
-console.log('Config:', CONFIG);
+log.info('Triangulator extension (OPTIMIZED v3.10) loaded');
+log.info(`Log level: ${LOG_LEVEL}`);
+log.debug('Config:', CONFIG);

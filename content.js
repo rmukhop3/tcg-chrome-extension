@@ -481,12 +481,25 @@ function initializeMatchCarousel(section) {
 function generateMatchesHTML(matches) {
   if (!matches || matches.length === 0) return '';
 
-  const matchCards = matches.map((match, index) => `
+  const matchCards = matches.map((match, index) => {
+    // Format credit hours display
+    let creditText = '';
+    if (match.hours) {
+      // Check if it's a range (string with dash) or single value
+      if (typeof match.hours === 'string' && match.hours.includes('-')) {
+        creditText = ` • ${match.hours} credit hours`;
+      } else {
+        const hrs = parseFloat(match.hours);
+        creditText = ` • ${hrs} credit hour${hrs !== 1 ? 's' : ''}`;
+      }
+    }
+    
+    return `
     <article class="match-card ${index === 0 ? 'is-active' : ''}" data-index="${index}">
       <div class="match-heading">
         <h3>${match.title}</h3>
       </div>
-      <span class="match-meta">ASU Match: ${match.subject} ${match.number}</span>
+      <span class="match-meta">ASU ${match.subject} ${match.number}${creditText}</span>
       <p>${match.description}</p>
       <div class="match-controls">
         ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--prev" type="button" aria-label="Show previous match">←</button>' : ''}
@@ -494,7 +507,7 @@ function generateMatchesHTML(matches) {
         ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--next" type="button" aria-label="Show next match">→</button>' : ''}
       </div>
     </article>
-  `).join('');
+  `}).join('');
 
   return `
     <section class="matches" aria-label="Equivalent courses at ASU">

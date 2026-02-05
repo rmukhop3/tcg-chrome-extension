@@ -359,17 +359,72 @@ function extractAsuMatchesFromSection(courseSection) {
       seen.add(key);
 
       const afterMatch = courseSection.slice(m.index);
-      const detailPattern = new RegExp(
+      
+      // CSV format based on column structure:
+      // match_canonical_key,match_CourseSubject,match_CourseNumber,match_CourseLongTitle,match_CourseDescription,match_CourseCreditUnits,match_CourseCreditMinimumValue,match_CourseCreditMaximumValue,match_Softmaxvalue
+      // Example: ARIZONASTATEUNIVERSITY::BIO::201,BIO,201.0,Human Anatomy/Physiology I,"Description...",Semester,4.0,4.0,0.708...
+      const csvPattern = new RegExp(
+        `ARIZONASTATEUNIVERSITY::${subj}::${num},${subj},${num}(?:\\.0)?,([^,]+),"([^"]+)",([^,]+),([\\d.]+),([\\d.]+)`,
+        'i'
+      );
+      const csvDetails = afterMatch.match(csvPattern);
+      
+      // Fallback: pattern with quoted description but no credits (description may continue to end)
+      const simplePattern = new RegExp(
         `${subj}[,\\s]+${num}[^,]*[,\\s]+([^,]+)[,\\s]+"([^"]+)"`,
         'i'
       );
-      const details = afterMatch.match(detailPattern);
+      const simpleDetails = afterMatch.match(simplePattern);
+      
+      // Last resort: pattern for truncated data (description may be cut off without closing quote)
+      const truncatedPattern = new RegExp(
+        `ARIZONASTATEUNIVERSITY::${subj}::${num},${subj},${num}(?:\\.0)?,([^,]+),"([^"]+)`,
+        'i'
+      );
+      const truncatedDetails = afterMatch.match(truncatedPattern);
+
+      let title = '';
+      let description = '';
+      let hours = null;
+
+      if (csvDetails) {
+        title = csvDetails[1].trim();
+        description = csvDetails[2].trim();
+        const creditMin = parseFloat(csvDetails[4]);
+        const creditMax = parseFloat(csvDetails[5]);
+        
+        console.log(`  📊 Credit hours for ${subj} ${num}: min=${creditMin}, max=${creditMax}`);
+        
+        // Format credit hours: single value if same, range if different
+        if (!isNaN(creditMin) && !isNaN(creditMax) && creditMin > 0) {
+          if (creditMin === creditMax) {
+            hours = creditMin;
+            console.log(`    → Single value: ${hours} credit hour(s)`);
+          } else {
+            hours = `${creditMin} - ${creditMax}`;
+            console.log(`    → Range: ${hours} credit hours`);
+          }
+        } else {
+          console.log(`    → Invalid credit values, skipping`);
+        }
+      } else if (simpleDetails) {
+        title = simpleDetails[1].trim();
+        description = simpleDetails[2].trim();
+        console.log(`  📊 No CSV pattern match for ${subj} ${num}, using simple pattern (no credit hours)`);
+      } else if (truncatedDetails) {
+        title = truncatedDetails[1].trim();
+        description = truncatedDetails[2].trim();
+        console.log(`  📊 Truncated data for ${subj} ${num}, extracted partial description (no credit hours)`);
+      } else {
+        console.log(`  📊 No details found for ${subj} ${num}`);
+      }
 
       matches.push({
         subject: subj,
         number: num,
-        title: details ? details[1].trim() : '',
-        description: details ? details[2].trim() : ''
+        title: title,
+        description: description,
+        hours: hours
       });
     }
   }
@@ -379,22 +434,36 @@ function extractAsuMatchesFromSection(courseSection) {
 
 /**
  * Filter ASU matches to only include those with valid descriptions
- * This is instant (no latency) since it's just array filtering
+ * If a match has missing/invalid data, search across all chunks for complete data
  */
-function filterValidAsuMatches(matches) {
+function filterValidAsuMatches(matches, ragCandidates = null) {
   if (!matches || matches.length === 0) return [];
 
-  const filtered = matches.filter((match, idx) => {
-    const hasValidDescription = isValidAsuDescription(match.description);
+  const filtered = matches.map((match, idx) => {
+    let finalMatch = match;
+    let hasValidDescription = isValidAsuDescription(match.description);
 
-    if (!hasValidDescription) {
-      console.log(`  ❌ Filtered out match ${idx + 1}: ${match.subject} ${match.number} (desc length: ${match.description?.length || 0})`);
-    } else {
-      console.log(`  ✅ Keeping match ${idx + 1}: ${match.subject} ${match.number} (desc length: ${match.description.length})`);
+    // If description is invalid/missing OR credit hours are missing, try to find complete data in other chunks
+    const needsCompleteData = !hasValidDescription || (hasValidDescription && match.hours === null);
+    
+    if (needsCompleteData && ragCandidates) {
+      console.log(`  🔍 Searching other chunks for complete data: ${match.subject} ${match.number} (reason: ${!hasValidDescription ? 'invalid description' : 'missing credit hours'})`);
+      const completeData = findCompleteAsuMatchData(ragCandidates, match.subject, match.number);
+      if (completeData && isValidAsuDescription(completeData.description)) {
+        console.log(`  ✅ Found complete data in another chunk for ${match.subject} ${match.number} (hours: ${completeData.hours})`);
+        finalMatch = completeData;
+        hasValidDescription = true;
+      }
     }
 
-    return hasValidDescription;
-  });
+    if (!hasValidDescription) {
+      console.log(`  ❌ Filtered out match ${idx + 1}: ${finalMatch.subject} ${finalMatch.number} (desc length: ${finalMatch.description?.length || 0})`);
+      return null;
+    } else {
+      console.log(`  ✅ Keeping match ${idx + 1}: ${finalMatch.subject} ${finalMatch.number} (desc length: ${finalMatch.description.length}, hours: ${finalMatch.hours})`);
+      return finalMatch;
+    }
+  }).filter(m => m !== null);
 
   return filtered;
 }
@@ -411,6 +480,39 @@ function isValidAsuDescription(description) {
 
   const lower = description.toLowerCase();
   return description.length >= 30 && !lower.includes(CONFIG.invalidDescriptionText);
+}
+
+/**
+ * Search all chunks to find complete data for a specific ASU course
+ * This helps when a course appears truncated in one chunk but complete in another
+ */
+function findCompleteAsuMatchData(ragCandidates, subj, num) {
+  const csvPattern = new RegExp(
+    `ARIZONASTATEUNIVERSITY::${subj}::${num},${subj},${num}(?:\\.0)?,([^,]+),"([^"]+)",([^,]+),([\\d.]+),([\\d.]+)`,
+    'i'
+  );
+  
+  for (const candidate of ragCandidates) {
+    const match = candidate.text.match(csvPattern);
+    if (match) {
+      const creditMin = parseFloat(match[4]);
+      const creditMax = parseFloat(match[5]);
+      let hours = null;
+      
+      if (!isNaN(creditMin) && !isNaN(creditMax) && creditMin > 0) {
+        hours = creditMin === creditMax ? creditMin : `${creditMin} - ${creditMax}`;
+      }
+      
+      return {
+        subject: subj,
+        number: num,
+        title: match[1].trim(),
+        description: match[2].trim(),
+        hours: hours
+      };
+    }
+  }
+  return null;
 }
 
 /**
@@ -480,9 +582,9 @@ async function callRagSearch(token, query) {
     search_params: {
       db_type: "opensearch",
       collection: "0cc3f744a8c740b0b36afb154d07ae24",
-      top_k: 12,
+      top_k: 1,
       output_fields: ["content", "source_name", "chunk_number", "page_number"],
-      retrieval_type: "neighbor"
+      retrieval_type: "chunk"
     }
   };
 
@@ -524,6 +626,16 @@ async function callRagSearch(token, query) {
 
   console.log(`RAG returned ${candidates.length} results, top scores:`,
     candidates.slice(0, 3).map(c => c.score.toFixed(2)));
+
+  // Debug: Log the raw chunks from /search endpoint
+  console.log('='.repeat(60));
+  console.log('🔍 RAG /search CHUNKS DEBUG:');
+  candidates.forEach((chunk, idx) => {
+    console.log(`\n--- Chunk ${idx + 1} (score: ${chunk.score.toFixed(4)}) ---`);
+    console.log(`ID: ${chunk.id}`);
+    console.log(`Text:\n${chunk.text}`);
+  });
+  console.log('='.repeat(60));
 
   return candidates;
 }
@@ -737,14 +849,14 @@ async function fetchCourseData(courseData) {
           reqNum.base
         );
         // Filter is already applied inside collectAllAsuMatches
-        const fallbackMatches = filterValidAsuMatches(extractedCourse.asuMatches || []);
+        const fallbackMatches = filterValidAsuMatches(extractedCourse.asuMatches || [], ragCandidates);
         matches = comprehensiveMatches.length > 0 ? comprehensiveMatches : fallbackMatches;
 
         console.log(`ASU match collection: comprehensive=${comprehensiveMatches.length}, fallback=${fallbackMatches.length}, final=${matches.length}`);
       } else {
         // For fuzzy/no_match, filter the single-course extraction results
         const unfiltered = extractedCourse.asuMatches || [];
-        matches = filterValidAsuMatches(unfiltered);
+        matches = filterValidAsuMatches(unfiltered, ragCandidates);
         console.log(`ASU match filtering: unfiltered=${unfiltered.length}, filtered=${matches.length}`);
       }
 
@@ -911,9 +1023,9 @@ async function fetchCourseData(courseData) {
       }
 
       if (llmMatches.length > 0) {
-        matches = filterValidAsuMatches(llmMatches);
+        matches = filterValidAsuMatches(llmMatches, ragCandidates);
       } else if (extractedCourse?.asuMatches?.length > 0) {
-        matches = filterValidAsuMatches(extractedCourse.asuMatches);
+        matches = filterValidAsuMatches(extractedCourse.asuMatches, ragCandidates);
       }
 
       return buildResponse({

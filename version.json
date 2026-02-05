@@ -1,5 +1,29 @@
 {
-    "version": "1.0.5",
-    "last_updated": "2026-01-29",
-    "description": "Movable UI triangulator extension, Default position for the extension is updated to the top right corner, Added a back arrow for ASU matches, Update match text: Current text = Exact match → update to Suggested matches, Update text: match not found → Course not found"
+    "version": "1.0.6",
+    "last_updated": "2026-02-05",
+    "description": "Credit hours display, logging system, and UI improvements",
+    "changelog": {
+        "1.0.6": {
+            "date": "2026-02-05",
+            "changes": [
+                "Added credit hours extraction from CourseCreditMinimumValue/CourseCreditMaximumValue",
+                "Display credit hours as single value or range (e.g., '4 credit hours' or '1 - 3 credit hours')",
+                "Implemented logging system with configurable LOG_LEVEL (INFO, DEBUG, LOCAL)",
+                "Added cross-chunk search for complete ASU match data when truncated",
+                "Drag extension from anywhere on popup (minimized or maximized)",
+                "Position persistence - popup remembers position when clicking new rows",
+                "Updated ASU match display format: 'ASU SUBJ NUM • X credit hours'"
+            ]
+        },
+        "1.0.5": {
+            "date": "2026-01-29",
+            "changes": [
+                "Movable UI triangulator extension",
+                "Default position updated to top right corner",
+                "Added back arrow for ASU matches carousel",
+                "Updated match text: Exact match → Suggested matches",
+                "Updated text: match not found → Course not found"
+            ]
+        }
+    }
 }

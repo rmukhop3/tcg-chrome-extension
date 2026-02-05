@@ -482,16 +482,24 @@ function generateMatchesHTML(matches) {
   if (!matches || matches.length === 0) return '';
 
   const matchCards = matches.map((match, index) => {
-    // Only show credit hours if available and valid (> 0)
-    const hours = match.hours && Number(match.hours) > 0 ? Number(match.hours) : null;
-    const creditHoursText = hours ? ` • ${hours} credit hour${hours !== 1 ? 's' : ''}` : '';
+    // Format credit hours display
+    let creditText = '';
+    if (match.hours) {
+      // Check if it's a range (string with dash) or single value
+      if (typeof match.hours === 'string' && match.hours.includes('-')) {
+        creditText = ` • ${match.hours} credit hours`;
+      } else {
+        const hrs = parseFloat(match.hours);
+        creditText = ` • ${hrs} credit hour${hrs !== 1 ? 's' : ''}`;
+      }
+    }
     
     return `
     <article class="match-card ${index === 0 ? 'is-active' : ''}" data-index="${index}">
       <div class="match-heading">
         <h3>${match.title}</h3>
       </div>
-      <span class="match-meta">ASU ${match.subject} ${match.number}${creditHoursText}</span>
+      <span class="match-meta">ASU ${match.subject} ${match.number}${creditText}</span>
       <p>${match.description}</p>
       <div class="match-controls">
         ${matches.length > 1 ? '<button class="carousel-btn carousel-btn--prev" type="button" aria-label="Show previous match">←</button>' : ''}

@@ -5,15 +5,64 @@
 // 2. More lenient catalog detection - helps catch institutions deeper in results
 // 3. Reduces false "catalog_not_found" when institution IS indexed but appears deeper
 // 
-// Previous fixes:
+// Previous fixes: 
 // - Corrected catalog detection: found institution = no_match, not catalog_not_found
 // - Filter ASU matches without valid descriptions
 // - Comprehensive ASU match collection from all course variants
 
-const API_CONFIG = {
-  searchUrl: 'https://api-main-poc.aiml.asu.edu/search',
-  queryUrl: 'https://api-main-poc.aiml.asu.edu/query'
+// ============================================================================
+// ENVIRONMENT CONFIGURATION
+// ============================================================================
+const ENVIRONMENTS = {
+  poc: {
+    name: 'POC (Development)',
+    searchUrl: 'https://api-main-poc.aiml.asu.edu/search',
+    queryUrl: 'https://api-main-poc.aiml.asu.edu/query'
+  },
+  prod: {
+    name: 'Production',
+    searchUrl: 'https://api-main.aiml.asu.edu/search',  // Add production search URL here
+    queryUrl: 'https://api-main.aiml.asu.edu/query'   // Add production query URL here
+  }
 };
+
+const DEFAULT_ENVIRONMENT = 'poc';
+
+// Dynamic API config - will be loaded from storage
+let API_CONFIG = {
+  searchUrl: ENVIRONMENTS[DEFAULT_ENVIRONMENT].searchUrl,
+  queryUrl: ENVIRONMENTS[DEFAULT_ENVIRONMENT].queryUrl
+};
+
+// Load environment config from storage
+async function loadApiConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ environment: DEFAULT_ENVIRONMENT }, (items) => {
+      const env = items.environment;
+      const config = ENVIRONMENTS[env] || ENVIRONMENTS[DEFAULT_ENVIRONMENT];
+      API_CONFIG.searchUrl = config.searchUrl;
+      API_CONFIG.queryUrl = config.queryUrl;
+      log.info(`[ENV] Loaded environment: ${env}`);
+      log.info(`[ENV] Search URL: ${API_CONFIG.searchUrl}`);
+      log.info(`[ENV] Query URL: ${API_CONFIG.queryUrl}`);
+      resolve(API_CONFIG);
+    });
+  });
+}
+
+// Initialize config on startup
+loadApiConfig();
+
+// Listen for storage changes to update config dynamically
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.environment) {
+    const newEnv = changes.environment.newValue;
+    const config = ENVIRONMENTS[newEnv] || ENVIRONMENTS[DEFAULT_ENVIRONMENT];
+    API_CONFIG.searchUrl = config.searchUrl;
+    API_CONFIG.queryUrl = config.queryUrl;
+    log.info(`[ENV] Environment changed to: ${newEnv}`);
+  }
+});
 
 // ============================================================================
 // LOGGING CONFIGURATION

@@ -29,12 +29,18 @@
             font-size: 14px;
         }
 
-        input[type="password"] {
+        input[type="password"],
+        select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
             box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: white;
+        }
+
+        input[type="password"] {
             font-family: monospace;
         }
 
@@ -70,6 +76,15 @@
 
 <body>
     <h1>Triangulator Settings</h1>
+
+    <div class="field">
+        <label for="environment">API Environment</label>
+        <select id="environment">
+            <option value="poc">POC (Development)</option>
+            <option value="prod">Production</option>
+        </select>
+        <p class="help">Select which API environment to use.</p>
+    </div>
 
     <div class="field">
         <label for="token">CreateAI Bearer Token</label>

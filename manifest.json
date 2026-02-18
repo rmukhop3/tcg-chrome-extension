@@ -10,7 +10,8 @@
   "host_permissions": [
     "https://transferguide-qa.apps.asu.edu/*",
     "https://transferguide.apps.asu.edu/*",
-    "https://api-main-poc.aiml.asu.edu/*"
+    "https://api-main-poc.aiml.asu.edu/*",
+    "https://api-main.aiml.asu.edu/*"
   ],
   "content_scripts": [
     {

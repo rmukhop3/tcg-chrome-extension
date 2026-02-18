@@ -1,8 +1,17 @@
 {
-    "version": "1.0.6",
-    "last_updated": "2026-02-05",
-    "description": "Credit hours display, logging system, and UI improvements",
+    "version": "1.0.7",
+    "last_updated": "2026-02-18",
+    "description": "Environment switching system for POC/Production APIs",
     "changelog": {
+        "1.0.7": {
+            "date": "2026-02-18",
+            "changes": [
+                "Added environment configuration system (POC/Production)",
+                "Environment selector in Options page",
+                "Dynamic API config loading from storage",
+                "Auto-updates config when environment changes"
+            ]
+        },
         "1.0.6": {
             "date": "2026-02-05",
             "changes": [

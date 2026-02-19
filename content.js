@@ -261,46 +261,55 @@ function showTriangulatorPopup(courseData, event) {
   document.body.appendChild(popup);
   initializePopupControls(popup);
 
-  // Send message to background script to fetch all course data (unified)
-  chrome.runtime.sendMessage({
-    action: 'getCourseData',
-    courseData: courseData
-  }, (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('Runtime error:', chrome.runtime.lastError);
-      popup.innerHTML = generatePopupHTML(courseData, { loading: false, error: 'Connection error' });
-      initializePopupControls(popup);
-      return;
-    }
+  // Get showAsuMatches setting and fetch course data
+  chrome.storage.local.get({ showAsuMatches: false }, (settings) => {
+    const showAsuMatches = settings.showAsuMatches;
 
-    console.log('Received data from background:', response);
-
-    if (response && response.success) {
-      // Show popup with data
-      popup.innerHTML = generatePopupHTML(courseData, {
-        description: response.description,
-        matches: response.matches,
-        match_type: response.match_type,
-        similarity: response.similarity,
-        reflected_course: response.reflected_course,
-        description_is_missing: response.description_is_missing,
-        loading: false
-      });
-      initializePopupControls(popup);
-
-      // Initialize carousel if there are matches
-      const container = popup.querySelector('#matches-container');
-      const matchesSection = container?.querySelector('.matches');
-      if (matchesSection) {
-        initializeMatchCarousel(matchesSection);
+    // Send message to background script to fetch all course data (unified)
+    chrome.runtime.sendMessage({
+      action: 'getCourseData',
+      courseData: courseData
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Runtime error:', chrome.runtime.lastError);
+        popup.innerHTML = generatePopupHTML(courseData, { loading: false, error: 'Connection error', showAsuMatches });
+        initializePopupControls(popup);
+        return;
       }
-    } else {
-      popup.innerHTML = generatePopupHTML(courseData, {
-        loading: false,
-        error: response?.error || 'Failed to fetch course details'
-      });
-      initializePopupControls(popup);
-    }
+
+      console.log('Received data from background:', response);
+
+      if (response && response.success) {
+        // Show popup with data
+        popup.innerHTML = generatePopupHTML(courseData, {
+          description: response.description,
+          matches: response.matches,
+          match_type: response.match_type,
+          similarity: response.similarity,
+          reflected_course: response.reflected_course,
+          description_is_missing: response.description_is_missing,
+          loading: false,
+          showAsuMatches: showAsuMatches
+        });
+        initializePopupControls(popup);
+
+        // Initialize carousel if there are matches and showAsuMatches is enabled
+        if (showAsuMatches) {
+          const container = popup.querySelector('#matches-container');
+          const matchesSection = container?.querySelector('.matches');
+          if (matchesSection) {
+            initializeMatchCarousel(matchesSection);
+          }
+        }
+      } else {
+        popup.innerHTML = generatePopupHTML(courseData, {
+          loading: false,
+          error: response?.error || 'Failed to fetch course details',
+          showAsuMatches: showAsuMatches
+        });
+        initializePopupControls(popup);
+      }
+    });
   });
 }
 
@@ -313,6 +322,7 @@ function generatePopupHTML(courseData, response) {
   const matchType = response?.match_type || 'none';
   const reflectedCourse = response?.reflected_course;
   const descriptionMissing = response?.description_is_missing;
+  const showAsuMatches = response?.showAsuMatches ?? false;
 
   const getStatusIndicatorHTML = (type) => {
     let icon = '';
@@ -356,6 +366,40 @@ function generatePopupHTML(courseData, response) {
   const isFuzzy = (matchType === 'fuzzy' || matchType === 'strong_fuzzy');
   const isMatch = (matchType === 'exact' || isFuzzy);
 
+  // Generate ASU matches section only if showAsuMatches is enabled
+  const getMatchesContainerHTML = () => {
+    if (!showAsuMatches) {
+      return ''; // Hide ASU matches section entirely
+    }
+
+    if (isLoading) {
+      return `
+        <div id="matches-container">
+          <section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>
+        </div>
+      `;
+    }
+
+    if (isError) {
+      return `
+        <div id="matches-container">
+          <section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>
+        </div>
+      `;
+    }
+
+    if (!isMatch) {
+      return '';
+    }
+
+    return `
+      <div id="matches-container">
+        ${matchType === 'exact' ? getStatusIndicatorHTML(matchType) : ''}
+        ${hasMatches ? generateMatchesHTML(response.matches) : '<section class="matches"><p style="text-align: center; color: #666; padding: 20px; font-style: italic;">No equivalent courses found at ASU.</p></section>'}
+      </div>
+    `;
+  };
+
   return `
     <section class="overlay" role="dialog" aria-labelledby="course-title">
       <button class="overlay__action" type="button" aria-label="Toggle course details" aria-expanded="true"></button>
@@ -368,6 +412,7 @@ function generatePopupHTML(courseData, response) {
           </h1>
 
           ${!isLoading && !isError && matchType !== 'exact' ? getStatusIndicatorHTML(matchType) : ''}
+          ${!showAsuMatches && !isLoading && !isError && matchType === 'exact' ? getStatusIndicatorHTML(matchType) : ''}
 
           ${!isLoading && !isError && isFuzzy && reflectedCourse && reflectedCourse.subject ? `
             <div class="reflected-header" style="margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--divider);">
@@ -394,22 +439,7 @@ function generatePopupHTML(courseData, response) {
         </section>
         ` : ''}
 
-        ${!isLoading && !isError && isMatch ? `
-        <div id="matches-container">
-          ${matchType === 'exact' ? getStatusIndicatorHTML(matchType) : ''}
-          ${isLoading ? '<section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>' : ''}
-          ${isError ? `<section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>` : ''}
-          ${hasMatches ? generateMatchesHTML(response.matches) : '<section class="matches"><p style="text-align: center; color: #666; padding: 20px; font-style: italic;">No equivalent courses found at ASU.</p></section>'}
-        </div>
-        ` : isLoading ? `
-        <div id="matches-container">
-          <section class="matches"><p style="text-align: center; color: #666; padding: 20px;">Finding matches...</p></section>
-        </div>
-        ` : isError ? `
-        <div id="matches-container">
-          <section class="matches"><p style="text-align: center; color: #d32f2f; padding: 20px;">${response.error}</p></section>
-        </div>
-        ` : ''}
+        ${getMatchesContainerHTML()}
       </div>
     </section>
   `;

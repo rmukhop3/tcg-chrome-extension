@@ -44,6 +44,23 @@
             font-family: monospace;
         }
 
+        .checkbox-field {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-field input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-field label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
         .help {
             font-size: 12px;
             color: #666;
@@ -90,6 +107,14 @@
         <label for="token">CreateAI Bearer Token</label>
         <input type="password" id="token" placeholder="Paste your token here">
         <p class="help">This token is stored securely in your browser and never shared.</p>
+    </div>
+
+    <div class="field">
+        <div class="checkbox-field">
+            <input type="checkbox" id="showAsuMatches">
+            <label for="showAsuMatches">Show ASU Course Matches</label>
+        </div>
+        <p class="help">When enabled, displays equivalent ASU courses. Disable to show only course descriptions.</p>
     </div>
 
     <button id="save">Save Settings</button>

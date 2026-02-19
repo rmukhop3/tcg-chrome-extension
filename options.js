@@ -3,10 +3,12 @@
 function saveOptions() {
     const token = document.getElementById('token').value;
     const environment = document.getElementById('environment').value;
+    const showAsuMatches = document.getElementById('showAsuMatches').checked;
     
     chrome.storage.local.set({
         createaiToken: token,
-        environment: environment
+        environment: environment,
+        showAsuMatches: showAsuMatches
     }, () => {
         const status = document.getElementById('status');
         status.style.display = 'block';
@@ -19,10 +21,12 @@ function saveOptions() {
 function restoreOptions() {
     chrome.storage.local.get({
         createaiToken: '',
-        environment: 'poc'  // Default to POC
+        environment: 'poc',  // Default to POC
+        showAsuMatches: false  // Default to hiding ASU matches
     }, (items) => {
         document.getElementById('token').value = items.createaiToken;
         document.getElementById('environment').value = items.environment;
+        document.getElementById('showAsuMatches').checked = items.showAsuMatches;
     });
 }
 

@@ -28,7 +28,7 @@ const ENVIRONMENTS = {
   }
 };
 
-const DEFAULT_ENVIRONMENT = 'poc';
+const DEFAULT_ENVIRONMENT = 'prod';
 
 // Dynamic API config - will be loaded from storage
 let API_CONFIG = {
@@ -78,7 +78,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 //   "INFO"  - Only important messages (results, errors, fast path decisions)
 //   "DEBUG" - Detailed debugging info (extraction details, match filtering)
 //   "LOCAL" - Full verbose logging including raw chunks (for local development)
-const LOG_LEVEL = "DEBUG";
+const LOG_LEVEL = "INFO";
 
 const LOG_LEVELS = {
   INFO: 1,

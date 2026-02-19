@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Triangulator Chrome Extension</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    header {
+      background: linear-gradient(135deg, #8C1D40 0%, #FFC627 100%);
+      padding: 40px 20px;
+      text-align: center;
+      color: white;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      font-size: 1rem;
+      opacity: 0.9;
+    }
+
+    .content {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      padding: 40px;
+      margin-top: -20px;
+    }
+
+    h2 {
+      color: #8C1D40;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #FFC627;
+    }
+
+    h2:first-of-type {
+      margin-top: 0;
+    }
+
+    p {
+      margin-bottom: 15px;
+    }
+
+    ul {
+      margin-bottom: 15px;
+      padding-left: 25px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .highlight {
+      background-color: #FFF8E1;
+      border-left: 4px solid #FFC627;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 0 4px 4px 0;
+    }
+
+    .last-updated {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+
+    a {
+      color: #8C1D40;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    footer {
+      text-align: center;
+      padding: 30px 20px;
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 600px) {
+      .content {
+        padding: 25px;
+      }
+
+      header h1 {
+        font-size: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Privacy Policy</h1>
+    <p>Triangulator Chrome Extension</p>
+  </header>
+
+  <div class="container">
+    <div class="content">
+      <h2>Overview</h2>
+      <p>
+        The Triangulator Chrome Extension ("the Extension") is developed by Arizona State University (ASU) 
+        to assist users in viewing course descriptions and finding equivalent ASU courses while browsing 
+        transfer guide websites. We are committed to protecting your privacy and being transparent about 
+        the data we collect and how we use it.
+      </p>
+
+      <h2>Information We Collect</h2>
+      <p>The Extension collects and processes the following types of information:</p>
+      
+      <h3 style="margin-top: 20px; margin-bottom: 10px; color: #555;">Data You Provide</h3>
+      <ul>
+        <li><strong>API Token:</strong> You provide a CreateAI API token to enable course lookup functionality. This token is stored locally in your browser.</li>
+        <li><strong>Extension Settings:</strong> Your preferences (such as environment selection and display options) are stored locally in your browser.</li>
+      </ul>
+
+      <h3 style="margin-top: 20px; margin-bottom: 10px; color: #555;">Data Collected Automatically</h3>
+      <ul>
+        <li><strong>Course Information:</strong> When you interact with course elements on supported websites, the Extension reads course identifiers (institution, subject, course number, and title) from the page to perform lookups.</li>
+      </ul>
+
+      <div class="highlight">
+        <strong>Important:</strong> The Extension does NOT collect personal information such as your name, 
+        email address, browsing history outside of supported transfer guide websites, or any other 
+        personally identifiable information.
+      </div>
+
+      <h2>How We Use Information</h2>
+      <p>The information collected is used solely for the following purposes:</p>
+      <ul>
+        <li>To authenticate with the ASU CreateAI API service</li>
+        <li>To retrieve course descriptions from indexed academic catalogs</li>
+        <li>To find and display equivalent ASU courses</li>
+        <li>To remember your extension preferences</li>
+      </ul>
+
+      <h2>Data Storage</h2>
+      <p>
+        All user data (API token and settings) is stored locally in your browser using Chrome's 
+        <code>chrome.storage.local</code> API. This data:
+      </p>
+      <ul>
+        <li>Never leaves your device except when making authorized API requests</li>
+        <li>Is not synced across devices</li>
+        <li>Is automatically deleted when you uninstall the Extension</li>
+        <li>Can be cleared at any time through the Extension options page</li>
+      </ul>
+
+      <h2>Data Sharing</h2>
+      <p>
+        The Extension communicates with ASU's CreateAI API servers to retrieve course information. 
+        When making API requests, the following data is transmitted:
+      </p>
+      <ul>
+        <li>Your API authentication token</li>
+        <li>Course search queries (institution name, subject code, course number)</li>
+      </ul>
+      <p>
+        We do not sell, trade, or otherwise transfer your information to outside parties. 
+        Data transmitted to ASU servers is used only to fulfill course lookup requests.
+      </p>
+
+      <h2>Third-Party Services</h2>
+      <p>The Extension interacts with the following ASU services:</p>
+      <ul>
+        <li><strong>CreateAI API (POC):</strong> api-main-poc.aiml.asu.edu</li>
+        <li><strong>CreateAI API (Production):</strong> api-main.aiml.asu.edu</li>
+      </ul>
+      <p>
+        These services are operated by Arizona State University and are subject to ASU's 
+        institutional data protection policies.
+      </p>
+
+      <h2>Data Security</h2>
+      <p>We implement appropriate security measures to protect your information:</p>
+      <ul>
+        <li>All API communications use HTTPS encryption</li>
+        <li>API tokens are stored securely in browser local storage</li>
+        <li>No sensitive data is logged or stored on external servers</li>
+      </ul>
+
+      <h2>Your Rights</h2>
+      <p>You have the right to:</p>
+      <ul>
+        <li><strong>Access:</strong> View your stored settings through the Extension options page</li>
+        <li><strong>Modify:</strong> Change your API token and preferences at any time</li>
+        <li><strong>Delete:</strong> Remove all stored data by uninstalling the Extension or clearing the data through browser settings</li>
+        <li><strong>Opt-out:</strong> Disable or remove the Extension at any time</li>
+      </ul>
+
+      <h2>Permissions Explained</h2>
+      <p>The Extension requires the following browser permissions:</p>
+      <ul>
+        <li><strong>activeTab:</strong> To read course information from the current page when you interact with course elements</li>
+        <li><strong>storage:</strong> To save your API token and preferences locally</li>
+        <li><strong>Host permissions:</strong> To communicate with ASU CreateAI API servers and supported transfer guide websites</li>
+      </ul>
+
+      <h2>Children's Privacy</h2>
+      <p>
+        The Extension is intended for use by college students and academic advisors. 
+        We do not knowingly collect information from children under 13 years of age.
+      </p>
+
+      <h2>Changes to This Policy</h2>
+      <p>
+        We may update this Privacy Policy from time to time. Any changes will be reflected 
+        in the "Last Updated" date below. We encourage you to review this policy periodically.
+      </p>
+
+      <h2>Contact Us</h2>
+      <p>
+        If you have questions or concerns about this Privacy Policy or the Extension's 
+        data practices, please contact:
+      </p>
+      <p>
+        AI Acceleration | Enterprise Technology<br>
+        Arizona State University<br>
+        Contact: Riyank Mukhopadhyay<br>
+        Email: <a href="mailto:rmukhop3@asu.edu">rmukhop3@asu.edu</a>
+      </p>
+
+      <p class="last-updated">
+        <strong>Last Updated:</strong> February 19, 2026
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2026 Arizona State University. All rights reserved.</p>
+  </footer>
+</body>
+</html>

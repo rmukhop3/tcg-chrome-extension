@@ -5,15 +5,71 @@
 // 2. More lenient catalog detection - helps catch institutions deeper in results
 // 3. Reduces false "catalog_not_found" when institution IS indexed but appears deeper
 // 
-// Previous fixes:
+// Previous fixes: 
 // - Corrected catalog detection: found institution = no_match, not catalog_not_found
 // - Filter ASU matches without valid descriptions
 // - Comprehensive ASU match collection from all course variants
 
-const API_CONFIG = {
-  searchUrl: 'https://api-main-poc.aiml.asu.edu/search',
-  queryUrl: 'https://api-main-poc.aiml.asu.edu/query'
+// ============================================================================
+// ENVIRONMENT CONFIGURATION
+// ============================================================================
+const ENVIRONMENTS = {
+  poc: {
+    name: 'POC (Development)',
+    searchUrl: 'https://api-main-poc.aiml.asu.edu/search',
+    queryUrl: 'https://api-main-poc.aiml.asu.edu/query',
+    collection: '0cc3f744a8c740b0b36afb154d07ae24'  // POC collection ID
+  },
+  prod: {
+    name: 'Production',
+    searchUrl: 'https://api-main.aiml.asu.edu/search',
+    queryUrl: 'https://api-main.aiml.asu.edu/query',
+    collection: '5ae7de03a0a24aa99b2db16207ceb0b8'   // Production collection ID
+  }
 };
+
+const DEFAULT_ENVIRONMENT = 'prod';
+
+// Dynamic API config - will be loaded from storage
+let API_CONFIG = {
+  searchUrl: ENVIRONMENTS[DEFAULT_ENVIRONMENT].searchUrl,
+  queryUrl: ENVIRONMENTS[DEFAULT_ENVIRONMENT].queryUrl,
+  collection: ENVIRONMENTS[DEFAULT_ENVIRONMENT].collection
+};
+
+// Load environment config from storage
+async function loadApiConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get({ environment: DEFAULT_ENVIRONMENT }, (items) => {
+      const env = items.environment;
+      const config = ENVIRONMENTS[env] || ENVIRONMENTS[DEFAULT_ENVIRONMENT];
+      API_CONFIG.searchUrl = config.searchUrl;
+      API_CONFIG.queryUrl = config.queryUrl;
+      API_CONFIG.collection = config.collection;
+      log.info(`[ENV] Loaded environment: ${env}`);
+      log.info(`[ENV] Search URL: ${API_CONFIG.searchUrl}`);
+      log.info(`[ENV] Query URL: ${API_CONFIG.queryUrl}`);
+      log.info(`[ENV] Collection: ${API_CONFIG.collection}`);
+      resolve(API_CONFIG);
+    });
+  });
+}
+
+// Initialize config on startup
+loadApiConfig();
+
+// Listen for storage changes to update config dynamically
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.environment) {
+    const newEnv = changes.environment.newValue;
+    const config = ENVIRONMENTS[newEnv] || ENVIRONMENTS[DEFAULT_ENVIRONMENT];
+    API_CONFIG.searchUrl = config.searchUrl;
+    API_CONFIG.queryUrl = config.queryUrl;
+    API_CONFIG.collection = config.collection;
+    log.info(`[ENV] Environment changed to: ${newEnv}`);
+    log.info(`[ENV] Collection: ${API_CONFIG.collection}`);
+  }
+});
 
 // ============================================================================
 // LOGGING CONFIGURATION
@@ -59,6 +115,14 @@ const log = {
 };
 
 const CONFIG = {
+  // ========================================
+  // QUICK TOGGLES - Change these for testing
+  // ========================================
+  SHOW_ASU_MATCHES: false,  // Toggle to enable/disable ASU matches (overrides options setting when true)
+  
+  // ========================================
+  // Processing options
+  // ========================================
   skipLlmWhenExactMatch: true,
   skipLlmWhenCatalogNotFound: true,
   minRagScoreForTrust: 8.0,
@@ -66,7 +130,7 @@ const CONFIG = {
 
   catalogNotFoundThresholds: {
     maxTopScore: 12.0,
-    minInstitutionMatchRatio: 0.4
+    minInstitutionMatchRatio: 0.3  // Lowered from 0.4 for better full name matching
   },
 
   // LLM optimization settings
@@ -209,44 +273,125 @@ function classifyMatch(requestedSubject, requestedNumber, foundSubject, foundNum
 
 /**
  * Check if institution name matches with abbreviation handling
+ * Supports both abbreviated names (BOISE_STATE_U) and full names (Boise State University)
  */
 function checkInstitutionMatch(requested, found) {
   if (!requested || !found) return { matches: false, ratio: 0 };
 
   const normalize = (str) => str.toLowerCase()
-    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '')
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')  // Replace punctuation with spaces
     .replace(/\s{2,}/g, ' ')
     .trim();
 
   const req = normalize(requested);
   const ref = normalize(found);
 
+  // Direct match
   if (req === ref) return { matches: true, ratio: 1.0 };
 
-  const reqWords = req.split(' ').filter(w => w.length > 2);
-  const refWords = ref.split(' ').filter(w => w.length > 2);
+  // Check if one contains the other (for full name vs abbreviated)
+  if (req.includes(ref) || ref.includes(req)) {
+    return { matches: true, ratio: 0.9 };
+  }
 
+  const reqWords = req.split(' ').filter(w => w.length > 1);  // Lowered from 2 to catch more words
+  const refWords = ref.split(' ').filter(w => w.length > 1);
+
+  // Expanded abbreviations mapping (both directions)
   const abbreviations = {
-    'university': 'univ', 'college': 'coll', 'agricultural': 'ag',
-    'technical': 'tech', 'technology': 'tech', 'institute': 'inst',
-    'community': 'comm', 'state': 'st', 'north': 'n', 'south': 's',
-    'east': 'e', 'west': 'w', 'district': 'dist', 'angeles': 'la',
-    'los': 'la', 'san': 's'
+    'university': ['univ', 'u'],
+    'univ': ['university', 'u'],
+    'u': ['university', 'univ'],
+    'college': ['coll', 'col', 'c'],
+    'coll': ['college', 'col'],
+    'col': ['college', 'coll'],
+    'agricultural': ['ag', 'agri', 'agriculture'],
+    'ag': ['agricultural', 'agriculture'],
+    'technical': ['tech', 'tec'],
+    'technology': ['tech', 'tec'],
+    'tech': ['technical', 'technology'],
+    'institute': ['inst', 'i'],
+    'inst': ['institute'],
+    'community': ['comm', 'cc'],
+    'comm': ['community'],
+    'cc': ['community college', 'community'],
+    'state': ['st', 's'],
+    'st': ['state'],
+    'north': ['n', 'no'],
+    'n': ['north'],
+    'south': ['s', 'so'],
+    's': ['south', 'state'],
+    'east': ['e'],
+    'e': ['east'],
+    'west': ['w'],
+    'w': ['west'],
+    'district': ['dist'],
+    'dist': ['district'],
+    'angeles': ['la'],
+    'los': ['la', 'l'],
+    'san': ['s'],
+    'california': ['cal', 'ca', 'calif'],
+    'cal': ['california'],
+    'ca': ['california'],
+    'florida': ['fl', 'fla'],
+    'fl': ['florida'],
+    'new': ['n'],
+    'york': ['y', 'ny'],
+    'texas': ['tx', 'tex'],
+    'arizona': ['az', 'ariz']
   };
 
   let matchCount = 0;
+  const usedRefWords = new Set();
+
   for (const w1 of reqWords) {
     for (const w2 of refWords) {
-      if (w1 === w2) { matchCount++; break; }
-      const abbr1 = abbreviations[w1];
-      const abbr2 = abbreviations[w2];
-      if ((abbr1 && abbr1 === w2) || (abbr2 && abbr2 === w1)) { matchCount++; break; }
-      if (w1.length > 4 && w2.length > 4 && (w1.startsWith(w2) || w2.startsWith(w1))) { matchCount++; break; }
+      if (usedRefWords.has(w2)) continue;
+      
+      // Exact word match
+      if (w1 === w2) {
+        matchCount++;
+        usedRefWords.add(w2);
+        break;
+      }
+      
+      // Check abbreviation mappings
+      const abbrs1 = abbreviations[w1] || [];
+      const abbrs2 = abbreviations[w2] || [];
+      if (abbrs1.includes(w2) || abbrs2.includes(w1)) {
+        matchCount++;
+        usedRefWords.add(w2);
+        break;
+      }
+      
+      // Prefix matching for longer words (catches partial matches)
+      if (w1.length >= 4 && w2.length >= 4) {
+        if (w1.startsWith(w2.slice(0, 4)) || w2.startsWith(w1.slice(0, 4))) {
+          matchCount++;
+          usedRefWords.add(w2);
+          break;
+        }
+      }
+      
+      // Substring match for very different lengths (e.g., "cal" in "california")
+      if (w1.length >= 3 && w2.length >= 3) {
+        if ((w2.length > w1.length * 2 && w2.includes(w1)) ||
+            (w1.length > w2.length * 2 && w1.includes(w2))) {
+          matchCount++;
+          usedRefWords.add(w2);
+          break;
+        }
+      }
     }
   }
 
-  const ratio = reqWords.length > 0 ? matchCount / reqWords.length : 0;
-  return { matches: ratio >= 0.5, ratio };
+  // Calculate ratio based on the shorter word list for better matching
+  const minWords = Math.min(reqWords.length, refWords.length);
+  const maxWords = Math.max(reqWords.length, refWords.length);
+  const ratio = maxWords > 0 ? matchCount / maxWords : 0;
+  
+  // More lenient threshold - if we match at least 30% of words, consider it a match
+  return { matches: ratio >= 0.3, ratio };
 }
 
 // ============================================================================
@@ -263,15 +408,21 @@ function detectCatalogNotFound(ragCandidates, requestedInstitution, requestedSub
 
   if (topScore < thresholds.maxTopScore) {
     log.debug(`Low RAG scores (top: ${topScore.toFixed(2)}) - checking institution match...`);
+    log.debug(`  Requested institution: "${requestedInstitution}"`);
 
     let foundInstitutionMatch = false;
     let bestInstitutionRatio = 0;
+    let foundInstitutions = [];
 
     for (const candidate of ragCandidates.slice(0, 5)) {
-      const instMatch = candidate.text.match(/([A-Z0-9 &\-]+)::[A-Z]{2,6}::\d/i);
+      // Updated regex to handle both v1 and v2 institution name formats
+      const instMatch = candidate.text.match(/([A-Za-z0-9 &\-_']+)::[A-Z]{2,6}::\d/i);
       if (instMatch) {
         const foundInst = instMatch[1].trim();
+        foundInstitutions.push(foundInst);
         const { matches, ratio } = checkInstitutionMatch(requestedInstitution, foundInst);
+        
+        log.debug(`  Comparing with: "${foundInst}" -> ratio: ${ratio.toFixed(2)}, matches: ${matches}`);
 
         if (ratio > bestInstitutionRatio) {
           bestInstitutionRatio = ratio;
@@ -279,16 +430,19 @@ function detectCatalogNotFound(ragCandidates, requestedInstitution, requestedSub
 
         if (matches) {
           foundInstitutionMatch = true;
+          log.debug(`  ✓ Institution match found!`);
           break;
         }
       }
     }
 
     if (!foundInstitutionMatch && bestInstitutionRatio < thresholds.minInstitutionMatchRatio) {
+      log.debug(`  ✗ No institution match. Best ratio: ${bestInstitutionRatio.toFixed(2)}, threshold: ${thresholds.minInstitutionMatchRatio}`);
+      log.debug(`  Found institutions in RAG: ${foundInstitutions.join(', ')}`);
       return {
         notFound: true,
         reason: 'institution_not_indexed',
-        details: { topScore, bestInstitutionRatio, requestedInstitution }
+        details: { topScore, bestInstitutionRatio, requestedInstitution, foundInstitutions }
       };
     }
   }
@@ -311,9 +465,11 @@ function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, re
   let canonicalPattern;
   let canonicalMatch;
 
+  // Updated regex to handle both v1 (ABRAHAM BALDWIN AG COLL) and v2 (Abraham Baldwin Agricultural College) formats
+  // Now supports: letters (upper/lower), numbers, spaces, &, -, _, '
   if (reqNum.suffix) {
     canonicalPattern = new RegExp(
-      `([A-Z0-9 &\\-]+)::${reqSubj}::${reqNum.base}${reqNum.suffix}\\b`,
+      `([A-Za-z0-9 &\\-_']+)::${reqSubj}::${reqNum.base}${reqNum.suffix}\\b`,
       'i'
     );
     canonicalMatch = chunkText.match(canonicalPattern);
@@ -321,7 +477,7 @@ function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, re
 
   if (!canonicalMatch) {
     canonicalPattern = new RegExp(
-      `([A-Z0-9 &\\-]+)::${reqSubj}::${reqNum.base}([A-Za-z]?)\\b`,
+      `([A-Za-z0-9 &\\-_']+)::${reqSubj}::${reqNum.base}([A-Za-z]?)\\b`,
       'i'
     );
     canonicalMatch = chunkText.match(canonicalPattern);
@@ -344,7 +500,8 @@ function extractCourseFromChunk(chunkText, requestedSubject, requestedNumber, re
 
   const keyPos = canonicalMatch.index;
   const afterKey = chunkText.slice(keyPos);
-  const nextCourseMatch = afterKey.slice(50).match(/\n[A-Z0-9 &\-]+::[A-Z]{2,6}::\d/);
+  // Updated regex to handle both v1 and v2 institution name formats
+  const nextCourseMatch = afterKey.slice(50).match(/\n[A-Za-z0-9 &\-_']+::[A-Z]{2,6}::\d/);
   const sectionEnd = nextCourseMatch ? 50 + nextCourseMatch.index : afterKey.length;
   const courseSection = afterKey.slice(0, sectionEnd);
 
@@ -585,7 +742,8 @@ function collectAllAsuMatches(ragCandidates, institution, subject, numberBase) {
       // Extract ASU matches from this section
       const sectionStart = match.index;
       const afterMatch = text.slice(sectionStart);
-      const nextCourseIdx = afterMatch.slice(100).search(/\n[A-Z0-9 &\-]+::[A-Z]{2,6}::\d/);
+      // Updated regex to handle both v1 and v2 institution name formats
+      const nextCourseIdx = afterMatch.slice(100).search(/\n[A-Za-z0-9 &\-_']+::[A-Z]{2,6}::\d/);
       const sectionEnd = nextCourseIdx > 0 ? 100 + nextCourseIdx : Math.min(afterMatch.length, 2000);
       const section = afterMatch.slice(0, sectionEnd);
 
@@ -623,7 +781,7 @@ async function callRagSearch(token, query) {
     query: query,
     search_params: {
       db_type: "opensearch",
-      collection: "0cc3f744a8c740b0b36afb154d07ae24",
+      collection: API_CONFIG.collection,
       top_k: 1,
       output_fields: ["content", "source_name", "chunk_number", "page_number"],
       retrieval_type: "chunk"
@@ -669,15 +827,15 @@ async function callRagSearch(token, query) {
   log.debug(`RAG returned ${candidates.length} results, top scores:`,
     candidates.slice(0, 3).map(c => c.score.toFixed(2)));
 
-  // Debug: Log the raw chunks from /search endpoint (LOCAL level only)
-  log.local('='.repeat(60));
-  log.local('🔍 RAG /search CHUNKS DEBUG:');
+  // Debug: Log the raw chunks from /search endpoint
+  log.debug('='.repeat(60));
+  log.debug('🔍 RAG /search CHUNKS DEBUG:');
   candidates.forEach((chunk, idx) => {
-    log.local(`\n--- Chunk ${idx + 1} (score: ${chunk.score.toFixed(4)}) ---`);
-    log.local(`ID: ${chunk.id}`);
-    log.local(`Text:\n${chunk.text}`);
+    log.debug(`\n--- Chunk ${idx + 1} (score: ${chunk.score.toFixed(4)}) ---`);
+    log.debug(`ID: ${chunk.id}`);
+    log.debug(`Text:\n${chunk.text}`);
   });
-  log.local('='.repeat(60));
+  log.debug('='.repeat(60));
 
   return candidates;
 }
@@ -724,8 +882,12 @@ async function fetchCourseData(courseData) {
   const startTime = Date.now();
 
   try {
-    const storage = await chrome.storage.local.get({ createaiToken: '' });
+    const storage = await chrome.storage.local.get({ createaiToken: '', showAsuMatches: false });
     const token = storage.createaiToken;
+    // CONFIG.SHOW_ASU_MATCHES acts as a code-level override
+    // If CONFIG.SHOW_ASU_MATCHES is true, always show matches
+    // Otherwise, use the user's setting from options
+    const showAsuMatches = CONFIG.SHOW_ASU_MATCHES || storage.showAsuMatches;
 
     if (!token) {
       return { success: false, error: 'API Token missing. Please set it in extension options.' };
@@ -741,6 +903,7 @@ async function fetchCourseData(courseData) {
     const query = `${institution} ${subject} ${number} ${title}`.trim();
     log.info('='.repeat(60));
     log.info('Fetching course data for:', query);
+    log.info(`[CONFIG] Show ASU Matches: ${showAsuMatches} (code override: ${CONFIG.SHOW_ASU_MATCHES}, options: ${storage.showAsuMatches})`);
     log.debug(`Requested: ${subject} ${reqNum.full} (base: ${reqNum.base}, suffix: "${reqNum.suffix}")`);
 
     // ========================================
@@ -756,6 +919,7 @@ async function fetchCourseData(courseData) {
 
       if (catalogCheck.notFound) {
         log.info(`⚡ FAST PATH: Catalog not found (reason: ${catalogCheck.reason})`);
+        log.info(`  Institution requested: "${institution}"`);
 
         return buildResponse({
           matchType: 'catalog_not_found',
@@ -811,22 +975,29 @@ async function fetchCourseData(courseData) {
     // the catalog isn't indexed at all (not just this specific course missing)
     if (!extractedCourse) {
       log.debug('No valid course extracted - checking if catalog is indexed...');
+      log.info(`  Requested institution: "${institution}"`);
 
       // Check if we can find ANY course from this institution in the RAG results
       // Check top 10 candidates (expanded from 5) to handle cases where institution
       // appears deeper in results
       let foundAnyInstitutionMatch = false;
       let checkedCandidates = 0;
+      let foundInstitutions = [];
 
       for (const candidate of ragCandidates.slice(0, 10)) {
         checkedCandidates++;
-        const instMatch = candidate.text.match(/([A-Z0-9 &\-]+)::[A-Z]{2,6}::\d/i);
+        // Updated regex to handle full institution names with mixed case
+        const instMatch = candidate.text.match(/([A-Za-z0-9 &\-_']+)::[A-Z]{2,6}::\d/i);
         if (instMatch) {
           const foundInst = instMatch[1].trim();
-          const { matches } = checkInstitutionMatch(institution, foundInst);
+          if (!foundInstitutions.includes(foundInst)) {
+            foundInstitutions.push(foundInst);
+          }
+          const { matches, ratio } = checkInstitutionMatch(institution, foundInst);
+          log.debug(`  Comparing: "${foundInst}" -> ratio: ${ratio.toFixed(2)}, match: ${matches}`);
           if (matches) {
             foundAnyInstitutionMatch = true;
-            log.debug(`  Found institution match: ${foundInst} (in candidate ${checkedCandidates})`);
+            log.debug(`  ✓ Institution match found: ${foundInst}`);
             break;
           }
         }
@@ -837,6 +1008,8 @@ async function fetchCourseData(courseData) {
       // the catalog IS indexed. Missing course = no_match, not catalog_not_found
       if (!foundAnyInstitutionMatch) {
         log.info(`⚡ FAST PATH: Catalog not found (no institution matches in top ${checkedCandidates} results)`);
+        log.info(`  Institutions found in RAG results:`);
+        foundInstitutions.forEach(inst => log.info(`    - ${inst}`));
 
         return buildResponse({
           matchType: 'catalog_not_found',
@@ -882,24 +1055,30 @@ async function fetchCourseData(courseData) {
         title: extractedCourse.title
       };
 
-      // For exact matches, collect ASU matches from ALL related course variants
-      if (matchType === 'exact') {
-        const comprehensiveMatches = collectAllAsuMatches(
-          ragCandidates,
-          institution,
-          subject,
-          reqNum.base
-        );
-        // Filter is already applied inside collectAllAsuMatches
-        const fallbackMatches = filterValidAsuMatches(extractedCourse.asuMatches || [], ragCandidates);
-        matches = comprehensiveMatches.length > 0 ? comprehensiveMatches : fallbackMatches;
+      // Only collect ASU matches if enabled in settings
+      if (showAsuMatches) {
+        // For exact matches, collect ASU matches from ALL related course variants
+        if (matchType === 'exact') {
+          const comprehensiveMatches = collectAllAsuMatches(
+            ragCandidates,
+            institution,
+            subject,
+            reqNum.base
+          );
+          // Filter is already applied inside collectAllAsuMatches
+          const fallbackMatches = filterValidAsuMatches(extractedCourse.asuMatches || [], ragCandidates);
+          matches = comprehensiveMatches.length > 0 ? comprehensiveMatches : fallbackMatches;
 
-        log.debug(`ASU match collection: comprehensive=${comprehensiveMatches.length}, fallback=${fallbackMatches.length}, final=${matches.length}`);
+          log.debug(`ASU match collection: comprehensive=${comprehensiveMatches.length}, fallback=${fallbackMatches.length}, final=${matches.length}`);
+        } else {
+          // For fuzzy/no_match, filter the single-course extraction results
+          const unfiltered = extractedCourse.asuMatches || [];
+          matches = filterValidAsuMatches(unfiltered, ragCandidates);
+          log.debug(`ASU match filtering: unfiltered=${unfiltered.length}, filtered=${matches.length}`);
+        }
       } else {
-        // For fuzzy/no_match, filter the single-course extraction results
-        const unfiltered = extractedCourse.asuMatches || [];
-        matches = filterValidAsuMatches(unfiltered, ragCandidates);
-        log.debug(`ASU match filtering: unfiltered=${unfiltered.length}, filtered=${matches.length}`);
+        log.info('[CONFIG] ASU matches collection skipped (disabled in settings)');
+        matches = [];
       }
 
       if (matchType === 'exact' && extractedCourse.description) {

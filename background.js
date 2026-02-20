@@ -28,7 +28,7 @@ const ENVIRONMENTS = {
   }
 };
 
-const DEFAULT_ENVIRONMENT = 'prod';
+const DEFAULT_ENVIRONMENT = 'poc';
 
 // Dynamic API config - will be loaded from storage
 let API_CONFIG = {
@@ -125,7 +125,7 @@ const CONFIG = {
   // ========================================
   skipLlmWhenExactMatch: true,
   skipLlmWhenCatalogNotFound: true,
-  minRagScoreForTrust: 8.0,
+  minRagScoreForTrust: 7.0,  // Lowered from 8.0 - deterministic extraction is reliable enough
   minDescriptionLength: 50,
 
   catalogNotFoundThresholds: {
@@ -1142,8 +1142,19 @@ async function fetchCourseData(courseData) {
     // ========================================
     // STEP 6: Call LLM for fuzzy/no_match cases
     // ========================================
-    log.info('⚠️ SLOW PATH: Calling LLM for validation/matching');
-    log.debug(`  Reason: matchType=${matchType}, descriptionMissing=${descriptionMissing}`);
+    const ragScore = extractionSource?.score || 0;
+    let slowPathReason = '';
+    if (matchType !== 'exact') {
+      slowPathReason = `matchType=${matchType} (not exact)`;
+    } else if (descriptionMissing) {
+      slowPathReason = 'description missing';
+    } else if (ragScore < CONFIG.minRagScoreForTrust) {
+      slowPathReason = `RAG score ${ragScore.toFixed(2)} < threshold ${CONFIG.minRagScoreForTrust}`;
+    } else {
+      slowPathReason = 'unknown';
+    }
+    log.info(`⚠️ SLOW PATH: Calling LLM for validation/matching`);
+    log.info(`  Reason: ${slowPathReason}`);
 
     // Build COMPACT context for faster LLM processing
     const ragContext = ragCandidates.slice(0, 2)

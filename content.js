@@ -412,7 +412,6 @@ function generatePopupHTML(courseData, response) {
           </h1>
 
           ${!isLoading && !isError && matchType !== 'exact' ? getStatusIndicatorHTML(matchType) : ''}
-          ${!showAsuMatches && !isLoading && !isError && matchType === 'exact' ? getStatusIndicatorHTML(matchType) : ''}
 
           ${!isLoading && !isError && isFuzzy && reflectedCourse && reflectedCourse.subject ? `
             <div class="reflected-header" style="margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--divider);">

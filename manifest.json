@@ -4,7 +4,6 @@
   "version": "1.0.7",
   "description": "AI-curated catalogs, human-reviewed and refined with AI generative matching",
   "permissions": [
-    "activeTab",
     "storage"
   ],
   "host_permissions": [

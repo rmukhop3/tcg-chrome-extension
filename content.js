@@ -1,5 +1,14 @@
 console.log('Triangulator extension loaded');
 
+// Check if extension context is still valid (e.g., after extension reload/update)
+function isExtensionContextValid() {
+  try {
+    return !!chrome.runtime?.id;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Store popup position for persistence across row clicks
 let savedPopupPosition = null;
 
@@ -262,6 +271,13 @@ function showTriangulatorPopup(courseData, event) {
   initializePopupControls(popup);
 
   // Get showAsuMatches setting and fetch course data
+  if (!isExtensionContextValid()) {
+    console.warn('Extension context invalidated. Please reload the page.');
+    popup.innerHTML = generatePopupHTML(courseData, { loading: false, error: 'Extension was updated. Please reload the page.', showAsuMatches: false });
+    initializePopupControls(popup);
+    return;
+  }
+
   chrome.storage.local.get({ showAsuMatches: false }, (settings) => {
     const showAsuMatches = settings.showAsuMatches;
 

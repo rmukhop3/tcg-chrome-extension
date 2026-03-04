@@ -1,8 +1,15 @@
 {
-    "version": "1.0.7",
-    "last_updated": "2026-02-18",
-    "description": "Environment switching system for POC/Production APIs",
+    "version": "1.0.8",
+    "last_updated": "2026-03-04",
+    "description": "Restrict QA extension to transfercourseadmin page only",
     "changelog": {
+        "1.0.8": {
+            "date": "2026-03-04",
+            "changes": [
+                "Restricted QA environment to only activate on /app/transfercourseadmin page",
+                "Extension no longer loads on other QA pages (e.g., /app/tca)"
+            ]
+        },
         "1.0.7": {
             "date": "2026-02-18",
             "changes": [
